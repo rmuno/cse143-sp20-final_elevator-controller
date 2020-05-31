@@ -30,6 +30,7 @@ begin
 		  moving_direction_up <= '0';
 		  moving_direction_down <= '0';
 			door_open <= '0';
+		else
 		end if;
   end process;
 end behavior_1;
