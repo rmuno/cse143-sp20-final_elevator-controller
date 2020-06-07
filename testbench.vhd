@@ -120,14 +120,49 @@ begin
 		clk <= not clk;
 		wait for 5 ns;
 		floor_request_up <= '0';
-
-		for i in 0 to (25) loop
+		
+		-- elevator should move up for 8 cycles after initial button press
+		for i in 0 to (7) loop
       clk <= not clk;
       wait for 5 ns;
+			assert (moving_direction_up = '1') report "elevator should be moving up!" severity error;
+			assert (door_open = '0') report "Door should remain closed while in motion!" severity error;
       clk <= not clk;
       wait for 5 ns;
-
     end loop;
+		
+		-- elevator level should now be '1', and doors should begin to open
+    clk <= not clk;
+    wait for 5 ns;
+		assert (current_floor = '1') report "Elevator current floor should be '1'!" severity error;
+
+		-- door opening
+		for i in 0 to (2) loop
+			assert (door_open = '0') report "Door should still be closed (but opening)" severity error;
+      clk <= not clk;
+      wait for 5 ns;
+      clk <= not clk;
+      wait for 5 ns;
+    end loop;
+
+		-- door open
+		for i in 0 to (4) loop
+			assert (door_open = '1') report "Door should be open!" severity error;
+      clk <= not clk;
+      wait for 5 ns;
+      clk <= not clk;
+      wait for 5 ns;
+    end loop;
+
+		-- door opening
+		for i in 0 to (2) loop
+			assert (door_open = '0') report "Door should be closing!" severity error;
+      clk <= not clk;
+      wait for 5 ns;
+      clk <= not clk;
+      wait for 5 ns;
+    end loop;
+
 
 		floor_request_down <= '1';
 		clk <= not clk;

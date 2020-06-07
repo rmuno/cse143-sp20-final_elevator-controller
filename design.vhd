@@ -167,7 +167,7 @@ begin
 		serve_request <= (not moving) and (not door_process) and floor_request;
 	end process;
 
-  CLK_PROCESS: process(reset_in, clk_in) is
+  STATES: process(reset_in, clk_in) is
 	begin
 	   -- reset
 		if (reset_in = '1') then
@@ -210,8 +210,6 @@ begin
 			elsif (door_process = '1') then
 				-- open doors
 				if ((door_opening = '1') and (ctr_door_open_close = DOOR_OPENCLOSE_DELAY)) then
-					assert false report "ctr_door_open_close: " & integer'image(to_integer(unsigned(ctr_door_open_close))) &
-							"/" & integer'image(to_integer(unsigned(DOOR_OPENCLOSE_DELAY))) severity note;
 					door_opening <= '0';
 					door_open <= '1';
 				-- door open - load passengers
