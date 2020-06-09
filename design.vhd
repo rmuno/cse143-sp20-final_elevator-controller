@@ -58,7 +58,7 @@ architecture behavior_1 of elevator_controller is
 
 
 	-- internals
---	signal moving: std_logic := '0';
+	signal moving: std_logic := '0';
 
 	-- hold input requests - users do not generally hold the button down until elevator arrives!
 	signal floor_request_up: std_logic := '0';
@@ -134,17 +134,14 @@ begin
 	end process;
 
 
-	COUNTERS: process(reset_in, clk_in,
-			door_opening, door_closing, door_open,
-			moving_direction_up, moving_direction_down) is
+	COUNTERS: process(reset_in, clk_in, door_opening, door_closing, door_open, moving_direction_up, moving_direction_down) is
 	begin
 		-- clocks
-		clk_in_door_open_close <= not clk_in and (door_opening or door_closing);
-		clk_in_door_passenger_loading <= not clk_in and door_open;
-		clk_in_moving <= not clk_in and (moving_direction_up or moving_direction_down);
+		clk_in_door_open_close <= clk_in and (door_opening or door_closing);
+		clk_in_door_passenger_loading <= clk_in and door_open;
+		clk_in_moving <= clk_in and (moving_direction_up or moving_direction_down);
 
 		-- timer resets
---		if (falling_edge(clk_in)) then --or rising_edge(clk_in)) then
 --		if (falling_edge(clk_in) or rising_edge(clk_in)) then
 		reset_in_door_open_close <= reset_in or ((not door_opening) and (not door_closing));
 		reset_in_door_passenger_loading <= reset_in or (not door_open);
@@ -156,20 +153,20 @@ begin
 	begin
 		case e_state is
 			when S_DOOR_OPENING =>
-				moving_direction_up <= '0'; moving_direction_down <= '0';
+				moving_direction_up <= '0'; moving_direction_down <= '0'; moving <= '0';
 				door_opening <= '1';
 			when S_DOOR_OPEN =>
 				door_opening <= '0'; door_open <= '1';
 			when S_DOOR_CLOSING =>
 				door_open <= '0'; door_closing <= '1';
 			when S_MOVING_UP =>
-				moving_direction_up <= '1';
+				moving_direction_up <= '1'; moving <= '1';
 			when S_MOVING_DOWN =>
-				moving_direction_down <= '1';
+				moving_direction_down <= '1'; moving <= '1';
 
 			--when S_IDLE =>
 			when others =>
-				moving_direction_up <= '0'; moving_direction_down <= '0';
+				moving <= '0'; moving_direction_up <= '0'; moving_direction_down <= '0';
 				door_opening <= '0'; door_closing <= '0'; door_open <= '0';
 		end case;
 	end process;
