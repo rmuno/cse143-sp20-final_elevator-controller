@@ -25,9 +25,9 @@ port(
   door_open_out: out std_logic
 );
 
-constant LEVEL_CHANGE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(8, CTR_SIZE));
-constant PASSENGER_LOADING_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(5, CTR_SIZE));
-constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(3, CTR_SIZE));
+constant LEVEL_CHANGE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_LEVEL_CHANGE, CTR_SIZE));
+constant PASSENGER_LOADING_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_PASSENGER_LOADING, CTR_SIZE));
+constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_DOOR_OPENCLOSE, CTR_SIZE));
 --constant ALL_ONES_2 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 --constant ALL_ONES_3 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 
