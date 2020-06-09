@@ -47,6 +47,8 @@ constant CTR_SIZE : integer := 4;
 --constant BOOP : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(8, CTR_SIZE));
 
 
+--function clk_tick(clk: std_logic) return st
+
 begin
 
   DUT: elevator_controller
@@ -96,89 +98,61 @@ begin
     wait for 1 ns;
     reset <= '0';
 
+    clk <= not clk; wait for 5 ns;
 		-- elevator must do nothin when no inputs are present
-    for i in 0 to (2) loop
-      clk <= not clk;
-      wait for 5 ns;
-      clk <= not clk;
-      wait for 5 ns;
+    for i in 1 to 3 loop
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			assert (current_floor = '0') report "current_floor not zero" severity note;
 			assert (moving_direction_up = '0') report "moving_direction_up not zero" severity note;
 			assert (moving_direction_down = '0') report "moving_direction_down not zero" severity note;
 			assert (door_open = '0') report "door_open not zero" severity note;
     end loop;
 
-		clk <= not clk;
-		wait for 5 ns;
-
 
 		-- straight-forward test: press button up
 		-- simulate temporary button press
 		floor_request_up <= '1';
-		clk <= not clk;
-		wait for 5 ns;
-		clk <= not clk;
-		wait for 5 ns;
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		floor_request_up <= '0';
 		
 		-- elevator should move up for 8 cycles after initial button press
-		for i in 0 to (7) loop
-      clk <= not clk;
-      wait for 5 ns;
+		for i in 1 to 8 loop
+			floor_request_down <= '1';
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			assert (moving_direction_up = '1') report "elevator should be moving up!" severity error;
 			assert (door_open = '0') report "Door should remain closed while in motion!" severity error;
-      clk <= not clk;
-      wait for 5 ns;
     end loop;
+		floor_request_down <= '0';	
+
 		
 		-- elevator level should now be '1', and doors should begin to open
-    clk <= not clk;
-    wait for 5 ns;
-		assert (current_floor = '1') report "Elevator current floor should be '1'!" severity error;
-
 		-- door opening
-		for i in 0 to (2) loop
+		for i in 1 to 3 loop
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			assert (current_floor = '1') report "Elevator current floor should be '1'!" severity error;
 			assert (door_open = '0') report "Door should still be closed (but opening)" severity error;
-      clk <= not clk;
-      wait for 5 ns;
-      clk <= not clk;
-      wait for 5 ns;
     end loop;
 
 		-- door open
-		for i in 0 to (4) loop
+		for i in 1 to 5 loop
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			assert (door_open = '1') report "Door should be open!" severity error;
-      clk <= not clk;
-      wait for 5 ns;
-      clk <= not clk;
-      wait for 5 ns;
     end loop;
 
 		-- door opening
 		for i in 0 to (2) loop
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			assert (door_open = '0') report "Door should be closing!" severity error;
-      clk <= not clk;
-      wait for 5 ns;
-      clk <= not clk;
-      wait for 5 ns;
     end loop;
 
 
-		floor_request_down <= '1';
-		clk <= not clk;
-		wait for 5 ns;
-		clk <= not clk;
-		wait for 5 ns;
-		floor_request_down <= '0';
+--		floor_request_down <= '1';
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--		floor_request_down <= '0';
 
 		for i in 0 to (25) loop
-      clk <= not clk;
-      wait for 5 ns;
-      clk <= not clk;
-      wait for 5 ns;
-
+      clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
     end loop;
-
 
 
     assert false report "elevator test complete" severity note;

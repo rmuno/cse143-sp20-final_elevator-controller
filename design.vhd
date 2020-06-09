@@ -31,6 +31,14 @@ constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_log
 end elevator_controller;
 
 architecture behavior_1 of elevator_controller is
+	type ELEVATOR_STATE is (
+		S_IDLE,
+		S_DOOR_OPENING, S_DOOR_OPEN, S_DOOR_CLOSING,
+		S_MOVING_UP, S_MOVING_DOWN
+	);
+
+	signal e_state: ELEVATOR_STATE;
+
 	component counter is
 	generic( N: integer );
 	port(
@@ -40,8 +48,6 @@ architecture behavior_1 of elevator_controller is
 	);
 	end component;
 
---	signal clk_in_door_open_close : std_logic := '0';
-  
   signal current_floor: std_logic := '0';
   signal moving_direction_up: std_logic := '0';
   signal moving_direction_down: std_logic := '0';
@@ -52,13 +58,7 @@ architecture behavior_1 of elevator_controller is
 
 
 	-- internals
-	signal moving: std_logic := '0';--(not door_open) and (moving_up or moving_down);
-	signal floor_request: std_logic := '0';--request_up or request_down;
-	signal door_process: std_logic := '0';--door_opening or door_closing or door_open;
-	signal serve_request: std_logic := '0';--(not moving) & (not door_process) & floor_request;
-
-	signal should_move_up: std_logic := '0';
-	signal should_move_down: std_logic := '0';
+--	signal moving: std_logic := '0';
 
 	-- hold input requests - users do not generally hold the button down until elevator arrives!
 	signal floor_request_up: std_logic := '0';
@@ -127,44 +127,51 @@ begin
 	OUTPUTS: process(clk_in, reset_in,
 		current_floor, moving_direction_up, moving_direction_down, door_open, door_opening) is
 	begin
-		-- assign output values to internals
     current_floor_out <= current_floor;
     moving_direction_up_out <= moving_direction_up;
     moving_direction_down_out <= moving_direction_down;
     door_open_out <= door_open;
+	end process;
+
+
+	COUNTERS: process(reset_in, clk_in,
+			door_opening, door_closing, door_open,
+			moving_direction_up, moving_direction_down) is
+	begin
+		-- clocks
+		clk_in_door_open_close <= not clk_in and (door_opening or door_closing);
+		clk_in_door_passenger_loading <= not clk_in and door_open;
+		clk_in_moving <= not clk_in and (moving_direction_up or moving_direction_down);
+
+		-- timer resets
+--		if (falling_edge(clk_in)) then --or rising_edge(clk_in)) then
+--		if (falling_edge(clk_in) or rising_edge(clk_in)) then
+		reset_in_door_open_close <= reset_in or ((not door_opening) and (not door_closing));
+		reset_in_door_passenger_loading <= reset_in or (not door_open);
+		reset_in_moving <= reset_in or (not (moving_direction_up or moving_direction_down));
 --		end if;
 	end process;
 
-
-	MOTION: process(floor_request_up, floor_request_down, current_floor) is
+	INTERNALS: process(e_state) is
 	begin
-		-- motion
-		should_move_up <= (floor_request_up) and (not current_floor);
-		should_move_down <= (floor_request_down) and (current_floor);
-	end process;
+		case e_state is
+			when S_DOOR_OPENING =>
+				moving_direction_up <= '0'; moving_direction_down <= '0';
+				door_opening <= '1';
+			when S_DOOR_OPEN =>
+				door_opening <= '0'; door_open <= '1';
+			when S_DOOR_CLOSING =>
+				door_open <= '0'; door_closing <= '1';
+			when S_MOVING_UP =>
+				moving_direction_up <= '1';
+			when S_MOVING_DOWN =>
+				moving_direction_down <= '1';
 
-	COUNTERS: process(reset_in, clk_in, door_opening, door_closing, door_open, moving) is
-	begin
-		-- clocks
-		clk_in_door_open_close <= clk_in and (door_opening or door_closing);
-		clk_in_door_passenger_loading <= clk_in and door_open;
-		clk_in_moving <= clk_in and moving;
-
-		-- timer resets
-		reset_in_door_open_close <= reset_in or ((not door_opening) and (not door_closing));
-		reset_in_door_passenger_loading <= reset_in or (not door_open);
-		reset_in_moving <= reset_in or (not moving);
-	end process;
-
-	INTERNALS: process(reset_in, clk_in,
-		door_open, door_opening, door_closing,
-		floor_request_up, floor_request_down,
-		moving_direction_up, moving_direction_down) is
-	begin
-		moving <= (not door_open) and (moving_direction_up or moving_direction_down);
-		floor_request <= floor_request_up or floor_request_down;
-		door_process <= door_opening or door_closing or door_open;
-		serve_request <= (not moving) and (not door_process) and floor_request;
+			--when S_IDLE =>
+			when others =>
+				moving_direction_up <= '0'; moving_direction_down <= '0';
+				door_opening <= '0'; door_closing <= '0'; door_open <= '0';
+		end case;
 	end process;
 
   STATES: process(reset_in, clk_in) is
@@ -172,56 +179,55 @@ begin
 	   -- reset
 		if (reset_in = '1') then
 			current_floor <= '0';
-		  moving_direction_up <= '0';
-		  moving_direction_down <= '0';
-			door_open <= '0';
-			door_opening <= '0';
-			door_closing <= '0';
 
+			e_state <= S_IDLE;
 		-- clock
 		elsif (rising_edge(clk_in)) then
---			assert false report "should_move_up " & std_logic'image(should_move_up) severity note;
-			if (serve_request = '1') then
-				-- attempt to move up, or open doors
-				if (floor_request_up = '1') then
-					moving_direction_up <= should_move_up;
-					door_opening <= not should_move_up;
-				else
-				-- attempt to move down, or open doors
-					moving_direction_down <= should_move_down;
-					door_opening <= not should_move_down;
-				end if;
-			elsif (moving = '1') then
-				-- disable motion once desired floor is reached
-				if (ctr_moving = LEVEL_CHANGE_DELAY) then
-					-- floor 1 reached
-					if (moving_direction_up = '1') then
-						moving_direction_up <= '0';
-						current_floor <= '1';
-					-- floor 0 reached
-					elsif (moving_direction_down = '1') then
-						moving_direction_down <= '0';
-						current_floor <= '0';
+			case e_state is
+				when S_IDLE =>
+					-- open door when on selected floor
+					if ((floor_request_up = '1' and current_floor = '1') or
+						(floor_request_down = '1' and current_floor = '0')) then
+						e_state <= S_DOOR_OPENING;
+					-- move to selected floor
+					elsif (floor_request_up = '1') then
+						e_state <= S_MOVING_UP;
+					elsif (floor_request_down = '1') then
+						e_state <= S_MOVING_DOWN;
 					end if;
 
-					door_opening <= '1';
-				end if;
+				when S_DOOR_OPENING =>
+					if (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
+						e_state <= S_DOOR_OPEN;
+					end if;
 
-			elsif (door_process = '1') then
-				-- open doors
-				if ((door_opening = '1') and (ctr_door_open_close = DOOR_OPENCLOSE_DELAY)) then
-					door_opening <= '0';
-					door_open <= '1';
-				-- door open - load passengers
-				elsif ((door_open = '1') and (ctr_door_passenger_loading = PASSENGER_LOADING_DELAY)) then
-					door_open <= '0';
-					door_closing <= '1';
-				-- door closing
-				elsif ((door_closing = '1') and (ctr_door_open_close = DOOR_OPENCLOSE_DELAY)) then
-					door_closing <= '0';
-				end if;
-			end if;
-		-- rising_edge(clk)
+				when S_DOOR_OPEN =>
+					if (ctr_door_passenger_loading = PASSENGER_LOADING_DELAY) then
+						e_state <= S_DOOR_CLOSING;
+					end if;
+
+				when S_DOOR_CLOSING =>
+					if (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
+						e_state <= S_IDLE;
+					end if;
+
+				when S_MOVING_UP =>
+					-- floor reached
+					if (ctr_moving = LEVEL_CHANGE_DELAY) then
+						current_floor <= '1';
+						e_state <= S_DOOR_OPENING;
+					end if;
+
+--				when S_FLOOR_REACHED =>
+
+				when S_MOVING_DOWN =>
+					-- floor reached
+					if (ctr_moving = LEVEL_CHANGE_DELAY) then
+						current_floor <= '0';
+						e_state <= S_DOOR_OPENING;
+					end if;
+			end case;
+
 		end if;
   end process;
 end behavior_1;
