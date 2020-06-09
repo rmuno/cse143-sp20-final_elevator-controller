@@ -7,7 +7,10 @@ use ieee.numeric_std.all;
 -- single elevator controller for 2-levels
 entity elevator_controller is
 generic(
-	CTR_SIZE : integer
+	CTR_SIZE : integer;
+	DELAY_LEVEL_CHANGE: integer;
+	DELAY_PASSENGER_LOADING: integer;
+	DELAY_DOOR_OPENCLOSE: integer
 );
 port(
   reset_in: in std_logic;
