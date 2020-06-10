@@ -180,7 +180,11 @@ begin
 --		end if;
 	end process;
 
-	INTERNALS: process(reset_in, e_state) is
+--	OTHER_INTERNALS: process(floor_reuqest_up,) is
+--	begin
+--	end process;
+
+	STATE_INTERNALS: process(reset_in, e_state) is
 	begin
 		if (reset_in = '1') then
 			moving_direction_up <= '0'; moving_direction_down <= '0';
@@ -244,7 +248,9 @@ begin
 						e_state <= S_MOVING_UP;
 					elsif (floor_request_down = '1') then
 						e_state <= S_MOVING_DOWN;
-					elsif (door_request_open_in = '1') then
+
+					-- technically ... the sensor should not be triggering when doors are closed!
+					elsif (door_request_open_in = '1' or door_sensor_in = '1') then
 						e_state <= S_DOOR_OPENING;
 					end if;
 
@@ -254,7 +260,7 @@ begin
 					end if;
 
 				when S_DOOR_OPEN =>
-						if (door_request_open_in = '1') then
+						if (door_request_open_in = '1' or door_sensor_in = '1') then
 							-- remain open
 						elsif (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY) then
 							e_state <= S_DOOR_CLOSING;
@@ -262,7 +268,7 @@ begin
 
 				when S_DOOR_CLOSING =>
 					-- process "open door" button press
-					if (door_request_open_in = '1') then
+					if (door_request_open_in = '1' or door_sensor_in = '1') then
 						e_state <= S_DOOR_REOPEN_INTERMEDIATE;
 
 					elsif (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
