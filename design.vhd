@@ -187,6 +187,7 @@ begin
 			moving <= '0'; moving_direction_up <= '0'; moving_direction_down <= '0';
 			-- this design assumes the door is open on reset (e.g. attempt to close to get to idle state)
 			door_opening <= '0'; door_closing <= '0'; door_open <= '1';
+			door_delay_offset <= (others => '0');
 		else
 			case e_state is
 				when S_DOOR_OPENING =>
@@ -195,10 +196,12 @@ begin
 					door_opening <= '1';
 				when S_DOOR_OPEN =>
 					door_opening <= '0'; door_open <= '1';
+					door_delay_offset <= ( others => '0' );
 				when S_DOOR_CLOSING =>
 					door_open <= '0'; door_closing <= '1';
 				when S_DOOR_REOPEN_INTERMEDIATE =>
 					door_closing <= '0'; door_open <= '0';
+					door_delay_offset <= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(ctr_door_open_close));
 				when S_MOVING_UP =>
 					moving_direction_up <= '1'; moving <= '1';
 				when S_MOVING_DOWN =>
@@ -206,6 +209,7 @@ begin
 	
 				--when S_IDLE =>
 				when others =>
+					door_delay_offset <= (others => '0');
 					moving <= '0'; moving_direction_up <= '0'; moving_direction_down <= '0';
 					door_opening <= '0'; door_closing <= '0'; door_open <= '0';
 			end case;
@@ -234,6 +238,8 @@ begin
 						e_state <= S_MOVING_UP;
 					elsif (floor_request_down = '1') then
 						e_state <= S_MOVING_DOWN;
+					elsif (door_request_open_in = '1') then
+						e_state <= S_DOOR_OPENING;
 					end if;
 
 				when S_DOOR_OPENING =>
@@ -243,9 +249,8 @@ begin
 
 				when S_DOOR_OPEN =>
 						-- hold door open
---					if (door_sensor_in = '1') then
+--					if (door_request_open_in = '1') then
 --					elsif (ctr_door_passenger_loading = PASSENGER_LOADING_DELAY) then
-						door_delay_offset <= ( others => '0' );
 						if (door_request_open_in = '1') then
 							-- remain open
 						elsif (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY) then
@@ -256,7 +261,7 @@ begin
 					-- process "open door" button press
 					if (door_request_open_in = '1') then
 						e_state <= S_DOOR_REOPEN_INTERMEDIATE;
-						door_delay_offset <= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(ctr_door_open_close));
+
 					elsif (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
 						e_state <= S_IDLE;
 					end if;
