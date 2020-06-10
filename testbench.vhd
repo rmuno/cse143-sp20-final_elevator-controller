@@ -202,6 +202,9 @@ begin
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			test_elevator_outputs(ONE, ZERO, ZERO, ZERO);
     end loop;
+		-- floor reached
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
 		
 		-- elevator level should now be '1', and doors should begin to open
 		-- door opening
@@ -230,6 +233,9 @@ begin
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			test_elevator_outputs(ZERO, ONE, ONE, ZERO);
     end loop;
+		-- floor reached
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 
 		-- door opening
 		for i in 1 to DELAY_DOOR_OPENCLOSE loop
@@ -284,6 +290,7 @@ begin
     end loop;
 
 		-- door open
+--		assert false report "elevator door should be open" severity note;
 		for i in 1 to DELAY_PASSENGER_LOADING loop
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
@@ -351,6 +358,10 @@ begin
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			test_elevator_outputs(ONE, ZERO, ZERO, ZERO);
     end loop;
+		-- floor reached
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
+
 		door_request_open <= '0';
 
 		-- arbitrary additional clock cycles

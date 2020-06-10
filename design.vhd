@@ -45,7 +45,7 @@ architecture behavior_1 of elevator_controller is
 	type ELEVATOR_STATE is (
 		S_IDLE,
 		S_DOOR_OPENING, S_DOOR_OPEN, S_DOOR_CLOSING, S_DOOR_REOPEN_INTERMEDIATE,
-		S_MOVING_UP, S_MOVING_DOWN
+		S_MOVING_UP, S_MOVING_DOWN, S_FLOOR_REACHED
 	);
 
 	signal e_state: ELEVATOR_STATE;
@@ -82,7 +82,6 @@ architecture behavior_1 of elevator_controller is
 
 
 	-- internals
-	signal moving: std_logic := '0';
 
 	-- hold input requests - users do not generally hold the button down until elevator arrives!
 	signal floor_request_up: std_logic := '0';
@@ -184,15 +183,15 @@ begin
 	INTERNALS: process(reset_in, e_state) is
 	begin
 		if (reset_in = '1') then
-			moving <= '0'; moving_direction_up <= '0'; moving_direction_down <= '0';
+			moving_direction_up <= '0'; moving_direction_down <= '0';
 			-- this design assumes the door is open on reset (e.g. attempt to close to get to idle state)
 			door_opening <= '0'; door_closing <= '0'; door_open <= '1';
+			door_delay_offset <= (others => '0');
+			current_floor <= '0';
 			door_delay_offset <= (others => '0');
 		else
 			case e_state is
 				when S_DOOR_OPENING =>
-					moving_direction_up <= '0'; moving_direction_down <= '0'; moving <= '0';
-					door_closing <= '0';
 					door_opening <= '1';
 				when S_DOOR_OPEN =>
 					door_opening <= '0'; door_open <= '1';
@@ -200,17 +199,26 @@ begin
 				when S_DOOR_CLOSING =>
 					door_open <= '0'; door_closing <= '1';
 				when S_DOOR_REOPEN_INTERMEDIATE =>
-					door_closing <= '0'; door_open <= '0';
+					door_closing <= '0';
 					door_delay_offset <= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(ctr_door_open_close));
 				when S_MOVING_UP =>
-					moving_direction_up <= '1'; moving <= '1';
+					moving_direction_up <= '1';
 				when S_MOVING_DOWN =>
-					moving_direction_down <= '1'; moving <= '1';
+					moving_direction_down <= '1';
+
+				when S_FLOOR_REACHED =>
+					if (moving_direction_up = '1') then
+						current_floor <= '1';
+					else
+						current_floor <= '0';
+					end if;
+					moving_direction_down <= '0';
+					moving_direction_up <= '0';
 	
 				--when S_IDLE =>
 				when others =>
 					door_delay_offset <= (others => '0');
-					moving <= '0'; moving_direction_up <= '0'; moving_direction_down <= '0';
+					moving_direction_up <= '0'; moving_direction_down <= '0';
 					door_opening <= '0'; door_closing <= '0'; door_open <= '0';
 			end case;
 		end if;
@@ -220,8 +228,6 @@ begin
 	begin
 	   -- reset
 		if (reset_in = '1') then
-			current_floor <= '0';
-			door_delay_offset <= (others => '0');
 			
 			-- once again, attempt to close door on reset
 			e_state <= S_DOOR_CLOSING;
@@ -248,9 +254,6 @@ begin
 					end if;
 
 				when S_DOOR_OPEN =>
-						-- hold door open
---					if (door_request_open_in = '1') then
---					elsif (ctr_door_passenger_loading = PASSENGER_LOADING_DELAY) then
 						if (door_request_open_in = '1') then
 							-- remain open
 						elsif (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY) then
@@ -272,18 +275,17 @@ begin
 				when S_MOVING_UP =>
 					-- floor reached
 					if (ctr_moving = LEVEL_CHANGE_DELAY) then
-						current_floor <= '1';
-						e_state <= S_DOOR_OPENING;
+						e_state <= S_FLOOR_REACHED;
 					end if;
-
---				when S_FLOOR_REACHED =>
 
 				when S_MOVING_DOWN =>
 					-- floor reached
 					if (ctr_moving = LEVEL_CHANGE_DELAY) then
-						current_floor <= '0';
-						e_state <= S_DOOR_OPENING;
+						e_state <= S_FLOOR_REACHED;
 					end if;
+
+				when S_FLOOR_REACHED =>
+					e_state <= S_DOOR_OPENING;
 			end case;
 
 		end if;
