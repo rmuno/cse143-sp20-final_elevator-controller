@@ -19,6 +19,13 @@ port(
   floor_request_up_in: in std_logic;
   floor_request_down_in: in std_logic;
 
+	-- request keep door open
+	door_request_open_in: std_logic;
+	-- request door close
+	door_request_close_in: std_logic;
+	-- additional step: door sensor to re-open door
+	door_sensor_in: in std_logic;
+
   current_floor_out: out std_logic;
   moving_direction_up_out: out std_logic;
   moving_direction_down_out: out std_logic;
@@ -28,6 +35,7 @@ port(
 constant LEVEL_CHANGE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_LEVEL_CHANGE, CTR_SIZE));
 constant PASSENGER_LOADING_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_PASSENGER_LOADING, CTR_SIZE));
 constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_DOOR_OPENCLOSE, CTR_SIZE));
+constant ALL_ZEROES : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(0, CTR_SIZE));
 --constant ALL_ONES_2 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 --constant ALL_ONES_3 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 
@@ -36,7 +44,7 @@ end elevator_controller;
 architecture behavior_1 of elevator_controller is
 	type ELEVATOR_STATE is (
 		S_IDLE,
-		S_DOOR_OPENING, S_DOOR_OPEN, S_DOOR_CLOSING,
+		S_DOOR_OPENING, S_DOOR_OPEN, S_DOOR_CLOSING, S_DOOR_REOPEN_INTERMEDIATE,
 		S_MOVING_UP, S_MOVING_DOWN
 	);
 
@@ -47,6 +55,19 @@ architecture behavior_1 of elevator_controller is
 	port(
 	  reset_in: in std_logic;
 	  clk_in: in std_logic;
+	  count_out: out std_logic_vector(N-1 downto 0)
+	);
+	end component;
+
+	component bidirectional_counter_no_overflow is
+	generic( N: integer );
+	port(
+	  reset_in: in std_logic;
+	  clk_in: in std_logic;
+		
+		-- up or down?
+		count_up_in: in std_logic;
+	
 	  count_out: out std_logic_vector(N-1 downto 0)
 	);
 	end component;
@@ -70,7 +91,10 @@ architecture behavior_1 of elevator_controller is
 	-- door open/close helper
 	signal clk_in_door_open_close: std_logic := '0';
 	signal reset_in_door_open_close: std_logic := '0';
+--	signal direction_open_close: std_logic := '1';
 	signal ctr_door_open_close : std_logic_vector(CTR_SIZE-1 downto 0);
+
+	signal door_delay_offset: std_logic_vector(CTR_SIZE-1 downto 0);
 
 	-- door passenger loading helper
 	signal clk_in_door_passenger_loading: std_logic := '0';
@@ -84,9 +108,12 @@ architecture behavior_1 of elevator_controller is
 
 begin
 	-- counter for opening / closing the door
-	CTR_CMP_DOOR_OPEN_CLOSE : counter
+	CTR_CMP_DOOR_OPEN_CLOSE : counter --bidirectional_counter_no_overflow
 		generic map(CTR_SIZE)
-		port map(reset_in_door_open_close, clk_in_door_open_close, ctr_door_open_close);
+		port map(reset_in_door_open_close,
+			clk_in_door_open_close,
+--			direction_open_close,
+			ctr_door_open_close);
 
 	-- counter to waiting for passengers to enter/leave elevator
 	CTR_CMP_PASSENGER_LOADING : counter
@@ -144,6 +171,8 @@ begin
 		clk_in_door_passenger_loading <= clk_in and door_open;
 		clk_in_moving <= clk_in and (moving_direction_up or moving_direction_down);
 
+		
+--		direction_open_close <= not door_closing;
 		-- timer resets
 --		if (falling_edge(clk_in) or rising_edge(clk_in)) then
 		reset_in_door_open_close <= reset_in or ((not door_opening) and (not door_closing));
@@ -162,11 +191,14 @@ begin
 			case e_state is
 				when S_DOOR_OPENING =>
 					moving_direction_up <= '0'; moving_direction_down <= '0'; moving <= '0';
+					door_closing <= '0';
 					door_opening <= '1';
 				when S_DOOR_OPEN =>
 					door_opening <= '0'; door_open <= '1';
 				when S_DOOR_CLOSING =>
 					door_open <= '0'; door_closing <= '1';
+				when S_DOOR_REOPEN_INTERMEDIATE =>
+					door_closing <= '0'; door_open <= '0';
 				when S_MOVING_UP =>
 					moving_direction_up <= '1'; moving <= '1';
 				when S_MOVING_DOWN =>
@@ -185,6 +217,7 @@ begin
 	   -- reset
 		if (reset_in = '1') then
 			current_floor <= '0';
+			door_delay_offset <= (others => '0');
 			
 			-- once again, attempt to close door on reset
 			e_state <= S_DOOR_CLOSING;
@@ -204,21 +237,32 @@ begin
 					end if;
 
 				when S_DOOR_OPENING =>
-					if (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
+					if (ctr_door_open_close >= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(door_delay_offset))) then
 						e_state <= S_DOOR_OPEN;
 					end if;
 
 				when S_DOOR_OPEN =>
-					if (ctr_door_passenger_loading = PASSENGER_LOADING_DELAY) then
-						e_state <= S_DOOR_CLOSING;
-					end if;
+						-- hold door open
+--					if (door_sensor_in = '1') then
+--					elsif (ctr_door_passenger_loading = PASSENGER_LOADING_DELAY) then
+						door_delay_offset <= ( others => '0' );
+						if (door_request_open_in = '1') then
+							-- remain open
+						elsif (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY) then
+							e_state <= S_DOOR_CLOSING;
+						end if;
 
 				when S_DOOR_CLOSING =>
---					if (floor_request_down = '1') then
---					elsif (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
-					if (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
+					-- process "open door" button press
+					if (door_request_open_in = '1') then
+						e_state <= S_DOOR_REOPEN_INTERMEDIATE;
+						door_delay_offset <= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(ctr_door_open_close));
+					elsif (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
 						e_state <= S_IDLE;
 					end if;
+
+				when S_DOOR_REOPEN_INTERMEDIATE =>
+					e_state <= S_DOOR_OPENING;
 
 				when S_MOVING_UP =>
 					-- floor reached

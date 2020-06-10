@@ -1,5 +1,5 @@
 
--- Down counter to simulate motion (doors opening)
+-- counter to simulate motion or doors opening/closing
 library IEEE;
 use IEEE.std_logic_1164.all;
 use ieee.numeric_std.all;

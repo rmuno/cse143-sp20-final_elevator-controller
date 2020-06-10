@@ -5,10 +5,10 @@ use IEEE.std_logic_1164.all;
 use ieee.numeric_std.all;
  
 entity testbench is
-	constant CTR_SIZE : integer := 4;
+	constant CTR_SIZE : integer := 6;
 	constant DELAY_LEVEL_CHANGE: integer := 8;
 	constant DELAY_PASSENGER_LOADING: integer := 5;
-	constant DELAY_DOOR_OPENCLOSE: integer := 3;
+	constant DELAY_DOOR_OPENCLOSE: integer := 4;
 
 	constant ZERO : std_logic := '0';
 	constant ONE : std_logic := '1';
@@ -32,6 +32,9 @@ port(
 
   floor_request_up_in: in std_logic;
   floor_request_down_in: in std_logic;
+	door_request_open_in: in std_logic;
+	door_request_close_in: in std_logic;
+	door_sensor_in: in std_logic;
 
   current_floor_out: out std_logic;
   moving_direction_up_out: out std_logic;
@@ -51,13 +54,15 @@ signal moving_direction_up: std_logic;
 signal moving_direction_down: std_logic;
 signal door_open: std_logic;
 
+signal door_sensor: std_logic := '0';
 signal floor_request_up: std_logic := '0';
 signal floor_request_down: std_logic := '0';
+signal door_request_open: std_logic := '0';
+signal door_request_close: std_logic := '0';
 
-
-
---constant BOOP : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(8, CTR_SIZE));
-
+--signal test_ctr_count_out: std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
+--signal test_ctr_count_up: std_logic := '1';
+--
 
 --function clk_tick(clk: std_logic) return st
 
@@ -77,10 +82,10 @@ procedure test_elevator_outputs(
 	floor: std_logic; door_is_open: std_logic
 ) is
 begin
-	assert (moving_direction_up = moving_up) report "moving_direction_up not zero" severity error;
-	assert (current_floor = floor) report "current_floor not zero" severity error;
-	assert (moving_direction_down = moving_down) report "moving_direction_down not zero" severity error;
-	assert (door_open = door_is_open) report "door_open not zero" severity error;
+	assert (moving_direction_up = moving_up) report "moving_direction_up not " & std_logic'image(moving_up) severity error;
+	assert (current_floor = floor) report "current_floor not " & std_logic'image(floor) severity error;
+	assert (moving_direction_down = moving_down) report "moving_direction_down not " & std_logic'image(moving_down) severity error;
+	assert (door_open = door_is_open) report "door_open not " & std_logic'image(door_is_open) severity error;
 end procedure;
 
 
@@ -107,6 +112,18 @@ end procedure;
 
 
 begin
+	
+--	dut_counter : bidirectional_counter_no_overflow
+--	generic map( CTR_SIZE )
+--	port map(
+--	  reset, clk,
+--		
+--		-- up or down?
+--		test_ctr_count_up,
+--	
+--	  test_ctr_count_out
+--	);
+--
 
   DUT: elevator_controller
 		generic map(
@@ -120,6 +137,8 @@ begin
 	    reset, clk,
 			-- elevator inputs
 			floor_request_up, floor_request_down,
+			door_request_open, door_request_close,
+			door_sensor,
 
 			-- elevator outputs
 			current_floor,
@@ -159,84 +178,160 @@ begin
     reset <= '0';
 
 		-- ****************** TEST - PRIMARY - reset, go up, go down
+--		clk <= not clk; wait for 5 ns;
+		-- elevator should attempt to close door on reset
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, current_floor, ZERO);
+--	  end loop;
+--
+--		-- straight-forward test: press button up
+--		-- simulate temporary button press
+--		floor_request_up <= '1';
+--		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--		floor_request_up <= '0';	
+--
+--		-- elevator should move up for 8 cycles after initial button press
+--		for i in 1 to DELAY_LEVEL_CHANGE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ONE, ZERO, ZERO, ZERO);
+--    end loop;
+--		
+--		-- elevator level should now be '1', and doors should begin to open
+--		-- door opening
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
+--    end loop;
+--
+--		-- door open
+--		for i in 1 to DELAY_PASSENGER_LOADING loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ONE, ONE);
+--    end loop;
+--
+--		-- door opening
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
+--    end loop;
+--
+--		floor_request_down <= '1';
+--		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--		floor_request_down <= '0';
+--
+--		for i in 1 to DELAY_LEVEL_CHANGE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ONE, ONE, ZERO);
+--    end loop;
+--
+--		-- door opening
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+--    end loop;
+--
+--		-- door open
+--		for i in 1 to DELAY_PASSENGER_LOADING loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+--    end loop;
+--
+--		-- door closing
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+--    end loop;
+--
+--		-- do nothing
+--		for i in 1 to 5 loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+--		end loop;
+--
+----    assert false report "elevator basic test complete" severity note;
+
+
+		-- ****************** TEST - SECONDARY - door_sensor: , go up, go down
 		clk <= not clk; wait for 5 ns;
+
 		-- elevator should attempt to close door on reset
 		for i in 1 to DELAY_DOOR_OPENCLOSE loop
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			test_elevator_outputs(ZERO, ZERO, current_floor, ZERO);
+			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 	  end loop;
 
 		-- straight-forward test: press button up
 		-- simulate temporary button press
-		floor_request_up <= '1';
-		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-		floor_request_up <= '0';	
-
-		-- elevator should move up for 8 cycles after initial button press
-		for i in 1 to DELAY_LEVEL_CHANGE loop
-			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (moving_direction_up = '1') report "elevator should be moving up!" severity error;
-			assert (door_open = '0') report "Door should remain closed while in motion!" severity error;
-    end loop;
-
-		
-		-- elevator level should now be '1', and doors should begin to open
-		-- door opening
-		for i in 1 to DELAY_DOOR_OPENCLOSE loop
-			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (current_floor = '1') report "Elevator current floor should be '1'!" severity error;
-			assert (door_open = '0') report "Door should still be closed (but opening)" severity error;
-    end loop;
-
-		-- door open
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (door_open = '1') report "Door should be open!" severity error;
-    end loop;
-
-		-- door opening
-		for i in 1 to DELAY_DOOR_OPENCLOSE loop
-			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (door_open = '0') report "Door should be closing!" severity error;
-    end loop;
-
 		floor_request_down <= '1';
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-		floor_request_down <= '0';
-
-		for i in 1 to DELAY_LEVEL_CHANGE loop
-			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (current_floor = '1') report "current_floor not one" severity note;
-			assert (moving_direction_up = '0') report "moving_direction_up not zero" severity note;
-			assert (moving_direction_down = '1') report "moving_direction_down not zero" severity note;
-			assert (door_open = '0') report "door_open not zero" severity note;
-    end loop;
-
+		floor_request_down <= '0';	
+		
+		-- elevator level should now be '0', and doors should begin to open
 		-- door opening
 		for i in 1 to DELAY_DOOR_OPENCLOSE loop
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (current_floor = '0') report "Elevator current floor should be '1'!" severity error;
-			assert (door_open = '0') report "Door should still be closed (but opening)" severity error;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
     end loop;
+
 
 		-- door open
 		for i in 1 to DELAY_PASSENGER_LOADING loop
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (door_open = '1') report "Door should be open!" severity error;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
     end loop;
 
-		-- door opening
-		for i in 1 to DELAY_DOOR_OPENCLOSE loop
-			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
-			assert (door_open = '0') report "Door should be closing!" severity error;
-    end loop;
-
-		-- do nothing
-		for i in 1 to 5 loop
+		-- door closing
+		for i in 1 to 3 loop
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		end loop;
+		door_request_open <= '1';
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		door_request_open <= '0';
+		for i in 1 to 2 loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+    end loop;
 
-    assert false report "elevator test complete" severity note;
+		for i in 1 to 7 loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		end loop;
+	
+
+--		floor_request_down <= '1';
+--		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--		floor_request_down <= '0';
+--
+--		for i in 1 to DELAY_LEVEL_CHANGE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ONE, ONE, ZERO);
+--    end loop;
+--
+--		-- door opening
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+--    end loop;
+--
+--		-- door open
+--		for i in 1 to DELAY_PASSENGER_LOADING loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+--    end loop;
+--
+--		-- door closing
+--		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+--    end loop;
+--
+--		-- do nothing
+--		for i in 1 to 5 loop
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+--		end loop;
+
+    assert false report "elevator door_sensor test complete" severity note;
     wait;
   end process;
 end tb;
