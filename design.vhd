@@ -262,7 +262,7 @@ begin
 				when S_DOOR_OPEN =>
 						if (door_request_open_in = '1' or door_sensor_in = '1') then
 							-- remain open
-						elsif (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY) then
+						elsif ((door_request_close_in = '1') or (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY)) then
 							e_state <= S_DOOR_CLOSING;
 						end if;
 

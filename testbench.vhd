@@ -16,6 +16,8 @@ entity testbench is
 	constant RUN_TEST1 : STD_LOGIC := '1';
 	constant RUN_TEST2 : STD_LOGIC := '1';
 	constant RUN_TEST3 : STD_LOGIC := '1';
+	constant RUN_TEST4 : STD_LOGIC := '1';
+	constant RUN_TEST5 : STD_LOGIC := '1';
 
 --	constant CLK_DELAY : integer := 5;
 end testbench; 
@@ -182,7 +184,7 @@ begin
     wait for 1 ns;
     reset <= '0';
 
-		-- ****************** TEST - PRIMARY - reset, go up, go down
+		-- ****************** TEST #1 - basic functionality: reset, go up, go down
 		if (RUN_TEST1 = '1') then
 		clk <= not clk; wait for 5 ns;
 		-- elevator should attempt to close door on reset
@@ -261,12 +263,12 @@ begin
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 		end loop;
 		clk <= not clk; wait for 5 ns;
-    assert false report "elevator test 1 complete" severity note;
+    assert false report "elevator test 1 (basic functionality) complete" severity note;
 		-- end test 1
 		end if;
 
 
-		-- ****************** TEST - SECONDARY - door_request_open:
+		-- ****************** TEST #2 door_request_open
 		if (RUN_TEST2 = '1') then
 		-- Test 1. Open door, hold open & let close.
 		clk <= not clk; wait for 5 ns;
@@ -429,7 +431,7 @@ begin
 
 		clk <= not clk; wait for 5 ns;
 
-    assert false report "elevator test 2 (door_open_button) complete" severity note;
+    assert false report "elevator test 2 (door_request_open) complete" severity note;
 		-- end test 2
 		end if;
  
@@ -597,10 +599,105 @@ begin
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		end loop;
 
-    assert false report "elevator test 3 (door_open_button) complete" severity note;
+    assert false report "elevator test 3 (door_sensor) complete" severity note;
 		-- end test 3
 		end if;
  
-   wait;
+   
+		
+		-- ****************** TEST #4 - door_request_close: test the "close doors" button
+		-- using door_sensor
+		if (RUN_TEST4 = '1') then
+			-- Test 1. Open door & attempt to close
+			clk <= not clk; wait for 5 ns;
+	
+	--		assert false report "elevator should begin opening door" severity note;
+			door_request_open <= '1';
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			door_request_open <= '0';
+			door_request_close <= '1';
+			
+			-- door_close should have no effect on door_opening state
+			-- door opening
+			for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+				test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+	    end loop;
+
+			-- release "close door" button before gate opens
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			door_request_close <= '0';
+	
+			-- door open
+	--		assert false report "elevator door should be open for 1 cycle" severity note;
+			for i in 1 to 1 loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+				test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+	    end loop;
+	
+
+			-- door should be closing
+			for i in 1 to DELAY_DOOR_OPENCLOSE loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+				test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+	    end loop;
+			door_request_close <= '0';
+
+			-- wait a few extra cycles
+			for i in 1 to 5 loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			end loop;
+
+    assert false report "elevator test 4 (door_request_close) complete" severity note;
+		-- test 4
+		end if;
+
+				-- ****************** TEST #4 - door_request_open, door_sensor and door_request_close: test conflicting cases
+		-- using door_sensor
+		if (RUN_TEST5 = '1') then
+			-- Test 1. Open door & attempt to close
+			clk <= not clk; wait for 5 ns;
+	
+	--		assert false report "elevator should begin opening door" severity note;
+			door_request_open <= '1';
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			door_request_open <= '0';
+			door_sensor <= '1';
+			door_request_close <= '1';
+			
+			for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+				test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+	    end loop;
+
+			-- release "close door" button before gate opens
+--			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+--			door_request_close <= '0';
+	
+			-- door_close should have no effect with door_open or door_sensor enabled
+			for i in 1 to DELAY_PASSENGER_LOADING*3 loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+				test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+	    end loop;
+			door_sensor <= '0';
+			door_request_close <= '0';
+
+			-- door should be closing
+			for i in 1 to DELAY_DOOR_OPENCLOSE loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+				test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+	    end loop;
+
+
+			-- wait a few extra cycles
+			for i in 1 to 5 loop
+				clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			end loop;
+
+    assert false report "elevator test 5 (door_request_open, door_sensor and door_request_close) complete" severity note;
+		-- test 5
+		end if;
+
+		wait;
   end process;
 end tb;
