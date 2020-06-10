@@ -347,7 +347,7 @@ begin
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
     end loop;
 
-		-- Test 4. open button should do nothing while in motion
+		-- Test 4. open button should do nothing while in motion (GOING UP)
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		floor_request_up <= '1';
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
@@ -361,8 +361,50 @@ begin
 		-- floor reached
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
-
 		door_request_open <= '0';
+
+		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
+    end loop;
+		for i in 1 to DELAY_PASSENGER_LOADING loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ONE, ONE);
+    end loop;
+		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ONE, ZERO);
+    end loop;
+
+
+		-- Test 4. open button should do nothing while in motion (GOING DOWN)
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		floor_request_down <= '1';
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		floor_request_down <= '0';
+
+		door_request_open <= '1';
+		for i in 1 to DELAY_LEVEL_CHANGE loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ONE, ONE, ZERO);
+    end loop;
+		-- floor reached
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+		door_request_open <= '0';
+		
+		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+    end loop;
+		for i in 1 to DELAY_PASSENGER_LOADING loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+    end loop;
+		for i in 1 to DELAY_DOOR_OPENCLOSE loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+    end loop;
 
 		-- arbitrary additional clock cycles
 		for i in 1 to 5 loop
