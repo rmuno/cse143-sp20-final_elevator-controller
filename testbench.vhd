@@ -330,7 +330,7 @@ begin
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
     end loop;
 
-		-- Test 3. open door & hold for some time
+		-- Test 3. open door & hold for some time, and door_open_request should interrupt closing state
 		door_request_open <= '1';
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		for i in 1 to DELAY_DOOR_OPENCLOSE loop
@@ -338,6 +338,22 @@ begin
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
     end loop;
 		for i in 1 to DELAY_PASSENGER_LOADING*3 loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
+    end loop;
+		door_request_open <= '0';
+		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+    end loop;
+		door_request_open <= '1';
+		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+		door_request_open <= '1';
+		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
+			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
+			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
+    end loop;
+		for i in 1 to DELAY_PASSENGER_LOADING loop
 			clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
     end loop;
@@ -377,7 +393,7 @@ begin
     end loop;
 
 
-		-- Test 4. open button should do nothing while in motion (GOING DOWN)
+		-- Test 5. open button should do nothing while in motion (GOING DOWN)
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
 		floor_request_down <= '1';
 		clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;
