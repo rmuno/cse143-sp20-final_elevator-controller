@@ -51,7 +51,9 @@ port(
   current_floor_out: out std_logic_vector(FLOOR_CTR_SIZE-1 downto 0);
   moving_direction_up_out: out std_logic;
   moving_direction_down_out: out std_logic;
-  door_open_out: out std_logic
+  door_open_out: out std_logic;
+  door_opening_out: out std_logic;
+  door_closing_out: out std_logic
 );
 end component;
 
@@ -65,6 +67,8 @@ signal current_floor: std_logic_vector(FLOOR_CTR_SIZE-1 downto 0);
 signal moving_direction_up: std_logic;
 signal moving_direction_down: std_logic;
 signal door_open: std_logic;
+signal door_opening: std_logic;
+signal door_closing: std_logic;
 
 signal door_sensor: std_logic := '0';
 signal floor_request_up: std_logic_vector(FLOOR_MAX-1 downto 0) := (others => '0');
@@ -88,13 +92,16 @@ end procedure;
 -- procedure help source: https://www.nandland.com/vhdl/examples/example-procedure-simple.html
 procedure test_elevator_outputs(
 	moving_up: std_logic; moving_down: std_logic;
-	floor: std_logic_vector(FLOOR_CTR_SIZE-1 downto 0); door_is_open: std_logic
+	floor: std_logic_vector(FLOOR_CTR_SIZE-1 downto 0);
+	door_is_open: std_logic; door_is_opening: std_logic; door_is_closing: std_logic
 ) is
 begin
 	assert (moving_direction_up = moving_up) report "moving_direction_up not " & std_logic'image(moving_up) severity error;
 	assert (current_floor = floor) report "current_floor not " & integer'image(to_integer(unsigned(floor))) severity error;
 	assert (moving_direction_down = moving_down) report "moving_direction_down not " & std_logic'image(moving_down) severity error;
 	assert (door_open = door_is_open) report "door_open not " & std_logic'image(door_is_open) severity error;
+	assert (door_is_opening = door_opening) report "door_opening not " & std_logic'image(door_is_opening) severity error;
+	assert (door_is_closing = door_closing) report "door_closing not " & std_logic'image(door_is_closing) severity error;
 end procedure;
 
 subtype floor_size is std_logic_vector(FLOOR_CTR_SIZE-1 downto 0);
@@ -106,13 +113,29 @@ begin
 	return std_logic_vector(to_unsigned(level, FLOOR_CTR_SIZE));
 end function;
 
+procedure test_elevator_idle(signal clkin : in std_logic; signal clkout : out std_logic) is
+begin
+	for i in 1 to 5 loop
+		tick(clkin, clkout);
+		test_elevator_outputs(ZERO, ZERO, current_floor, ZERO, ZERO, ZERO);
+	end loop;
+end procedure;
 
-procedure test_elevator_openclose(signal clkin : in std_logic; signal clkout : out std_logic) is
+procedure test_elevator_openclose(signal clkin : in std_logic; signal clkout : out std_logic; is_opening : std_logic) is
 begin
 	for i in 1 to DELAY_DOOR_OPENCLOSE loop
 		tick(clkin, clkout);
-		test_elevator_outputs(ZERO, ZERO, current_floor, ZERO);
+		test_elevator_outputs(ZERO, ZERO, current_floor, ZERO, is_opening, not is_opening);
   end loop;
+end procedure;
+
+procedure test_elevator_passengerload(signal clkin : in std_logic; signal clkout : out std_logic;
+	floor: integer) is
+begin
+	for i in 1 to DELAY_PASSENGER_LOADING loop
+		tick(clkin, clkout);
+		test_elevator_outputs(ZERO, ZERO, i2lvf(floor), ONE, ZERO, ZERO);
+   end loop;
 end procedure;
 
 procedure test_elevator_levelchange(signal clkin : in std_logic; signal clkout : out std_logic;
@@ -127,11 +150,11 @@ begin
 
 	for i in 1 to DELAY_LEVEL_CHANGE loop
 			tick(clkin, clkout);
-			test_elevator_outputs(going_up, not going_up, level_current, ZERO);
+			test_elevator_outputs(going_up, not going_up, level_current, ZERO, ZERO, ZERO);
     end loop;
 		-- floor reached
 		tick(clkin, clkout);
-		test_elevator_outputs(ZERO, ZERO, level_next, ZERO);
+		test_elevator_outputs(ZERO, ZERO, level_next, ZERO, ZERO, ZERO);
 end procedure;
 
 procedure arbitrary_additional_clock_cycles(signal clkin : in std_logic; signal clkout : out std_logic) is
@@ -185,9 +208,8 @@ begin
 
 			-- elevator outputs
 			current_floor,
-			moving_direction_up,
-			moving_direction_down,
-			door_open
+			moving_direction_up, moving_direction_down,
+			door_open, door_opening, door_closing
 		);
 --		DUT_COUNTER: counter
 --			generic map(N_ctr)
@@ -224,7 +246,7 @@ begin
 		if (RUN_TEST1 = '1') then
 		tick_half(clk, clk);
 		-- elevator should attempt to close door on reset
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- straight-forward test: press button up
 		-- simulate temporary button press
@@ -237,16 +259,13 @@ begin
 		
 		-- elevator level should now be '1', and doors should begin to open
 		-- door opening
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
 
 		-- door open
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(1), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 1);
 
-		-- door opening
-		test_elevator_openclose(clk, clk);
+		-- door closing
+		test_elevator_openclose(clk, clk, ZERO);
 
 		floor_request_up(0) <= '1';
 		tick(clk, clk);
@@ -255,22 +274,30 @@ begin
 		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO);
 
 		-- door opening
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
 
 		-- door open
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 
 		-- door closing
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
+
+
+		-- test open elevator door by pressing the floor request button for current floor
+		floor_request_up(0) <= '1';
+		tick(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
+		for i in 1 to 3 loop
+			test_elevator_passengerload(clk, clk, 0);
+		end loop;
+		floor_request_up(0) <= '0';
+		tick(clk, clk);
+--		test_elevator_passengerload(clk, clk, 0);
+		test_elevator_openclose(clk, clk, ZERO);
+
 
 		-- do nothing
-		for i in 1 to 5 loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
-		end loop;
+		test_elevator_idle(clk, clk);
 		tick_half(clk, clk);
     assert false report "elevator test 1 (basic functionality) complete" severity note;
 		-- end test 1
@@ -283,10 +310,7 @@ begin
 		tick_half(clk, clk);
 --		assert false report "elevator should be idle" severity note;
 		-- elevator should be idle
-		for i in 1 to DELAY_DOOR_OPENCLOSE+1 loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
-	  end loop;
+		test_elevator_idle(clk, clk);
 
 --		assert false report "elevator should begin opening door" severity note;
 		door_request_open <= '1';
@@ -297,70 +321,61 @@ begin
 		-- door opening
 		for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
 			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ONE, ZERO);
     end loop;
 
 		-- door open
 --		assert false report "elevator door should be open" severity note;
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+
+		test_elevator_passengerload(clk, clk, 0);
 
     -- 2. Open door, press & hold "open" while door closing
 		door_request_open <= '1';
 		-- hold door open
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 		door_request_open <= '0';
 
 		-- door closing
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 	
 
 		-- Test 2. press door open button at the last cycle of closing - should start to open door
 		door_request_open <= '1';
 		tick(clk, clk);
 		door_request_open <= '0';
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
 		-- load passengers
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 		-- close door
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- Test 3. open door & hold for some time, and door_open_request should interrupt closing state
 		door_request_open <= '1';
 		tick(clk, clk);
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
 
-		for i in 1 to DELAY_PASSENGER_LOADING*3 loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
+		for i in 1 to 3 loop
+			test_elevator_passengerload(clk, clk, 0);
     end loop;
 		door_request_open <= '0';
+
 		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
 			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ZERO, ONE);
     end loop;
+
 		door_request_open <= '1';
 		tick(clk, clk);
 		door_request_open <= '1';
+
 		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
 			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ONE, ZERO);
     end loop;
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 		door_request_open <= '0';
 
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- Test 4. open button should do nothing while in motion (GOING UP)
 		tick(clk, clk);
@@ -372,12 +387,9 @@ begin
 		test_elevator_levelchange(clk, clk, i2lvf(0), ONE);
 		door_request_open <= '0';
 
-		test_elevator_openclose(clk, clk);
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(1), ONE);
-    end loop;
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
+		test_elevator_passengerload(clk, clk, 1);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- Test 5. open button should do nothing while in motion (GOING DOWN)
 		tick(clk, clk);
@@ -389,12 +401,9 @@ begin
 		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO);
 		door_request_open <= '0';
 		
-		test_elevator_openclose(clk, clk);
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
+		test_elevator_passengerload(clk, clk, 0);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- arbitrary additional clock cycles
 		arbitrary_additional_clock_cycles(clk, clk);
@@ -413,10 +422,7 @@ begin
 		tick_half(clk, clk);
 --		assert false report "elevator should be idle" severity note;
 		-- elevator should be idle
-		for i in 1 to DELAY_DOOR_OPENCLOSE+1 loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
-	  end loop;
+		test_elevator_idle(clk, clk);
 
 --		assert false report "elevator should begin opening door" severity note;
 		door_sensor <= '1';
@@ -427,67 +433,56 @@ begin
 				-- door opening
 		for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
 			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ONE, ZERO);
     end loop;
 
 		-- door open
 --		assert false report "elevator door should be open" severity note;
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 
-    -- 2. Open door, press & hold "open" while door closing
+    -- 2. Open door, press & hold "open" before door closes
 		door_sensor <= '1';
 		-- hold door open
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 		door_sensor <= '0';
 
 		-- door closing
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 
 -- Test 2. press door open button at the last cycle of closing - should start to open door
 		door_sensor <= '1';
 		tick(clk, clk);
 		door_sensor <= '0';
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
 		-- load passengers
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 		-- close door
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- Test 3. open door & hold for some time, and door_open_request should interrupt closing state
 		door_sensor <= '1';
 		tick(clk, clk);
-		test_elevator_openclose(clk, clk);
-		for i in 1 to DELAY_PASSENGER_LOADING*3 loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
+		test_elevator_openclose(clk, clk, ONE);
+		for i in 1 to 3 loop
+			test_elevator_passengerload(clk, clk, 0);
     end loop;
 		door_sensor <= '0';
 		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
 			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ZERO, ONE);
     end loop;
+
 		door_sensor <= '1';
 		tick(clk, clk);
 		door_sensor <= '1';
+
 		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
 			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ONE, ZERO);
     end loop;
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
+		test_elevator_passengerload(clk, clk, 0);
 		door_sensor <= '0';
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ZERO);
 
 		-- Test 4. open button should do nothing while in motion (GOING UP)
 		tick(clk, clk);
@@ -499,12 +494,9 @@ begin
 		test_elevator_levelchange(clk, clk, i2lvf(0), ONE);
 		door_sensor <= '0';
 
-		test_elevator_openclose(clk, clk);
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(1), ONE);
-    end loop;
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, One);
+		test_elevator_passengerload(clk, clk, 1);
+		test_elevator_openclose(clk, clk, ZERO);
 
 
 		-- Test 5. open button should do nothing while in motion (GOING DOWN)
@@ -517,12 +509,9 @@ begin
 		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO);
 		door_sensor <= '0';
 		
-		test_elevator_openclose(clk, clk);
-		for i in 1 to DELAY_PASSENGER_LOADING loop
-			tick(clk, clk);
-			test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
-    end loop;
-		test_elevator_openclose(clk, clk);
+		test_elevator_openclose(clk, clk, ONE);
+		test_elevator_passengerload(clk, clk, 0);
+		test_elevator_openclose(clk, clk, ZERO);
 
 
 
@@ -551,7 +540,7 @@ begin
 			-- door opening
 			for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
 				tick(clk, clk);
-				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ONE, ZERO);
 	    end loop;
 
 			-- release "close door" button before gate opens
@@ -562,12 +551,12 @@ begin
 	--		assert false report "elevator door should be open for 1 cycle" severity note;
 			for i in 1 to 1 loop
 				tick(clk, clk);
-				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
+				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE, ZERO, ZERO);
 	    end loop;
 	
 
 			-- door should be closing
-			test_elevator_openclose(clk, clk);
+			test_elevator_openclose(clk, clk, ZERO);
 			door_request_close <= '0';
 
 			-- wait a few extra cycles
@@ -592,7 +581,7 @@ begin
 			
 			for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
 				tick(clk, clk);
-				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO);
+				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ZERO, ONE, ZERO);
 	    end loop;
 
 			-- release "close door" button before gate opens
@@ -600,15 +589,14 @@ begin
 --			door_request_close <= '0';
 	
 			-- door_close should have no effect with door_open or door_sensor enabled
-			for i in 1 to DELAY_PASSENGER_LOADING*3 loop
-				tick(clk, clk);
-				test_elevator_outputs(ZERO, ZERO, i2lvf(0), ONE);
+			for i in 1 to 3 loop
+				test_elevator_passengerload(clk, clk, 0);
 	    end loop;
 			door_sensor <= '0';
 			door_request_close <= '0';
 
 			-- door should be closing
-			test_elevator_openclose(clk, clk);
+			test_elevator_openclose(clk, clk, ZERO);
 
 
 			-- wait a few extra cycles
