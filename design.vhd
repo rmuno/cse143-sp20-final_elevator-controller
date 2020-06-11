@@ -10,14 +10,18 @@ generic(
 	CTR_SIZE : integer;
 	DELAY_LEVEL_CHANGE: integer;
 	DELAY_PASSENGER_LOADING: integer;
-	DELAY_DOOR_OPENCLOSE: integer
+	DELAY_DOOR_OPENCLOSE: integer;
+
+	--
+	FLOOR_CTR_SIZE: integer;
+	FLOOR_MAX: integer
 );
 port(
   reset_in: in std_logic;
   clk_in: in std_logic;
 
-  floor_request_up_in: in std_logic;
-  floor_request_down_in: in std_logic;
+  floor_request_up_in: in std_logic_vector(FLOOR_MAX-1 downto 0);
+  floor_request_down_in: in std_logic_vector(FLOOR_MAX-1 downto 0);
 
 	-- request keep door open
 	door_request_open_in: std_logic;
@@ -26,7 +30,7 @@ port(
 	-- additional step: door sensor to re-open door
 	door_sensor_in: in std_logic;
 
-  current_floor_out: out std_logic;
+  current_floor_out: out std_logic_vector(FLOOR_CTR_SIZE-1 downto 0);
   moving_direction_up_out: out std_logic;
   moving_direction_down_out: out std_logic;
   door_open_out: out std_logic
@@ -36,6 +40,9 @@ constant LEVEL_CHANGE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic
 constant PASSENGER_LOADING_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_PASSENGER_LOADING, CTR_SIZE));
 constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_DOOR_OPENCLOSE, CTR_SIZE));
 constant ALL_ZEROES : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(0, CTR_SIZE));
+
+constant FLOOR_FIRST : std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(0, FLOOR_CTR_SIZE));
+constant FLOOR_LAST : std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(FLOOR_MAX-1, FLOOR_CTR_SIZE));
 --constant ALL_ONES_2 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 --constant ALL_ONES_3 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 
@@ -72,7 +79,8 @@ architecture behavior_1 of elevator_controller is
 	);
 	end component;
 
-  signal current_floor: std_logic := '0';
+  signal current_floor: std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := (others => '0');
+	signal current_floor_one_hot : std_logic_vector(FLOOR_MAX-1 downto 0) := (others => '0');
   signal moving_direction_up: std_logic := '0';
   signal moving_direction_down: std_logic := '0';
   signal door_open: std_logic := '0';
@@ -80,12 +88,14 @@ architecture behavior_1 of elevator_controller is
 	signal door_opening: std_logic := '0';
 	signal door_closing: std_logic := '0';
 
+	signal any_request_up: std_logic := '0';
+	signal any_request_down: std_logic := '0';
 
 	-- internals
 
 	-- hold input requests - users do not generally hold the button down until elevator arrives!
-	signal floor_request_up: std_logic := '0';
-	signal floor_request_down: std_logic := '0';
+	signal floor_request_up: std_logic_vector(FLOOR_MAX-1 downto 0) := (others => '0');
+	signal floor_request_down: std_logic_vector(FLOOR_MAX-1 downto 0) := (others => '0');
 
 	-- door open/close helper
 	signal clk_in_door_open_close: std_logic := '0';
@@ -125,30 +135,83 @@ begin
 		port map(reset_in_moving, clk_in_moving, ctr_moving);
 
 	-- input-retention process
-	INPUTS: process(reset_in, floor_request_up_in, floor_request_down_in, current_floor, door_opening) is
+	INPUTS: process(reset_in, floor_request_up_in, floor_request_down_in, current_floor, door_opening, door_open) is
+
+--		variable current_floor_one_hot_base : std_logic_vector(FLOOR_MAX-1 downto 0);
+		variable up_requests_without_current_floor : std_logic_vector(FLOOR_MAX-1 downto 0);
+		variable down_requests_without_current_floor : std_logic_vector(FLOOR_MAX-1 downto 0);
+		variable current_floor_int : integer;
+
+		variable any_up : std_logic := '0';
+		variable any_down : std_logic := '0';
 	begin
+		current_floor_int := to_integer(unsigned(current_floor));
+
+		current_floor_one_hot <= (others => '0');
+		current_floor_one_hot(current_floor_int) <= '1';
+
+		up_requests_without_current_floor := (floor_request_up or floor_request_up_in) and (not current_floor_one_hot);
+		down_requests_without_current_floor := (floor_request_down or floor_request_down_in) and (not current_floor_one_hot);
+
 		if (reset_in = '1') then
-			floor_request_up <= '0';
-			floor_request_down <= '0';
+			floor_request_up <= (others => '0');
+			floor_request_down <= (others => '0');
+			any_request_up <= '0';
+			any_request_down <= '0';
 
 		-- disable floor request when door opens, but allow floor requests:
 		-- 1. while door is open, to hold it open
 		-- 2. while door closes, to open it again
 		else
+				-- mark any_request_up
+				any_request_up <= '0';
+				for i in 0 to FLOOR_MAX-1 loop
+					if (i > current_floor_int and (floor_request_up_in(i) = '1' or floor_request_down_in(i) = '1')) then
+						any_request_up <= any_request_up or '1';
+					end if;
+					--any_up := any_up or (i > current_floor_int and floor_request_up_in(i) = '1');
+				end loop;
+--				any_request_up <= any_up;
 
+				-- mark any_request_down
+				any_request_down <= '0';
+				for i in 0 to FLOOR_MAX-1 loop
+					if (i < current_floor_int and (floor_request_up_in(i) = '1' or floor_request_down_in(i) = '1')) then
+						any_request_down <= any_request_down or '1';
+					end if;
+					--any_down := any_down or (i > current_floor_int and floor_request_up_in(i) = '1');
+				end loop;
+--				any_request_down <= any_down;
+
+				-- clear current floor level UP request if the one-hot index is disabled
+				if (floor_request_up_in(current_floor_int) = '0') then
+					floor_request_up <= up_requests_without_current_floor;
+				else
+					floor_request_up <= floor_request_up or floor_request_up_in;
+				end if;
+
+				-- clear current floor level DOWN request if the one-hot index is disabled
+				if (floor_request_down_in(current_floor_int) = '0') then
+					floor_request_down <= down_requests_without_current_floor;
+				else
+					floor_request_down <= floor_request_down or floor_request_down_in;
+				end if;
+--			floor_request_up <= up_requests_without_current_floor;
+--			floor_request_down <= down_requests_without_current_floor;
 			-- "up" button
-			if (current_floor = '1' and door_opening = '1') then
-				floor_request_up <= '0';
-			elsif (floor_request_up_in = '1') then
-				floor_request_up <= '1';
-			end if;
-
+--			if (current_floor = '1' and door_opening = '1') then
+--				floor_request_up <= '0';
+--			elsif (floor_request_up_in = '1') then
+--				floor_request_up <= floor_request_up or floor_request_up_in;
+----				floor_request_up <= '1';
+--			end if;
+--
 			-- "down" button
-			if (current_floor = '0' and door_opening = '1') then
-				floor_request_down <= '0';
-			elsif (floor_request_down_in = '1') then
-				floor_request_down <= '1';
-			end if;
+--			if (current_floor = '0' and door_opening = '1') then
+--				floor_request_down <= '0';
+--			elsif (floor_request_down_in = '1') then
+--				floor_request_down <= '1';
+--			end if;
 		end if;
 	end process;
 
@@ -179,11 +242,6 @@ begin
 		reset_in_moving <= reset_in or (not (moving_direction_up or moving_direction_down));
 --		end if;
 	end process;
-
---	OTHER_INTERNALS: process(floor_reuqest_up,) is
---	begin
---	end process;
-
 	STATE_INTERNALS: process(reset_in, e_state) is
 	begin
 		if (reset_in = '1') then
@@ -191,7 +249,7 @@ begin
 			-- this design assumes the door is open on reset (e.g. attempt to close to get to idle state)
 			door_opening <= '0'; door_closing <= '0'; door_open <= '1';
 			door_delay_offset <= (others => '0');
-			current_floor <= '0';
+			current_floor <= (others => '0');
 			door_delay_offset <= (others => '0');
 		else
 			case e_state is
@@ -212,9 +270,9 @@ begin
 
 				when S_FLOOR_REACHED =>
 					if (moving_direction_up = '1') then
-						current_floor <= '1';
+						current_floor <= std_logic_vector(unsigned(current_floor) + 1);
 					else
-						current_floor <= '0';
+						current_floor <= std_logic_vector(unsigned(current_floor) - 1);
 					end if;
 					moving_direction_down <= '0';
 					moving_direction_up <= '0';
@@ -240,13 +298,15 @@ begin
 			case e_state is
 				when S_IDLE =>
 					-- open door when on selected floor
-					if ((floor_request_up = '1' and current_floor = '1') or
-						(floor_request_down = '1' and current_floor = '0')) then
+					if (floor_request_up(to_integer(unsigned(current_floor))) = '1' or
+							floor_request_down(to_integer(unsigned(current_floor))) = '1') then
+--					if ((floor_request_up = '1' and current_floor = '1') or
+--						(floor_request_down = '1' and current_floor = '0')) then
 						e_state <= S_DOOR_OPENING;
 					-- move to selected floor
-					elsif (floor_request_up = '1') then
+					elsif (any_request_up = '1') then
 						e_state <= S_MOVING_UP;
-					elsif (floor_request_down = '1') then
+					elsif (any_request_down = '1') then
 						e_state <= S_MOVING_DOWN;
 
 					-- technically ... the sensor should not be triggering when doors are closed!
@@ -255,7 +315,7 @@ begin
 					end if;
 
 				when S_DOOR_OPENING =>
-					if (ctr_door_open_close >= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(door_delay_offset))) then
+					if (ctr_door_open_close = std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(door_delay_offset))) then
 						e_state <= S_DOOR_OPEN;
 					end if;
 
