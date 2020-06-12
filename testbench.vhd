@@ -10,8 +10,8 @@ entity testbench is
 	constant DELAY_PASSENGER_LOADING: integer := 5;
 	constant DELAY_DOOR_OPENCLOSE: integer := 3;
 
-	constant FLOOR_CTR_SIZE: integer := 5;
-	constant FLOOR_MAX     : integer := 30;
+	constant FLOOR_CTR_SIZE: integer := 2;
+	constant FLOOR_MAX     : integer := 4;
 
 	constant ZERO : std_logic := '0';
 	constant ONE : std_logic := '1';
@@ -78,7 +78,7 @@ signal door_request_close: std_logic := '0';
 
 
 -- helpers for managing clock cycles with simple known statements (e.g. "tick(clk, clk)"
--- instead of "tick_half(clk, clk); clk <= not clk; wait for 5 ns")
+-- instead of "clk <= not clk; wait for 5 ns; clk <= not clk; wait for 5 ns;")
 procedure tick_half(signal clkin : in std_logic; signal clkout : out std_logic) is
 begin
 	clkout <= not clkin; wait for CLK_DELAY;
@@ -113,6 +113,12 @@ begin
 	return std_logic_vector(to_unsigned(level, FLOOR_CTR_SIZE));
 end function;
 
+procedure test_elevator_idle_single(signal clkin : in std_logic; signal clkout : out std_logic) is
+begin
+	tick(clkin, clkout);
+	test_elevator_outputs(ZERO, ZERO, current_floor, ZERO, ZERO, ZERO);
+end procedure;
+
 procedure test_elevator_idle(signal clkin : in std_logic; signal clkout : out std_logic) is
 begin
 	for i in 1 to 5 loop
@@ -138,8 +144,21 @@ begin
    end loop;
 end procedure;
 
+procedure test_elevator_open_load_close(signal clkin : in std_logic; signal clkout : out std_logic;
+	floor: integer) is
+begin
+			-- door opening
+		test_elevator_openclose(clkin, clkout, ONE);
+
+		-- door open
+		test_elevator_passengerload(clkin, clkout, floor);
+
+		-- door closing
+		test_elevator_openclose(clkin, clkout, ZERO);
+end procedure;
+
 procedure test_elevator_levelchange(signal clkin : in std_logic; signal clkout : out std_logic;
-	level_current: floor_size; going_up: std_logic) is
+	level_current: floor_size; going_up: std_logic; should_keep_going: std_logic ) is
 	variable level_next : floor_size;
 begin
 	if (going_up = '1') then
@@ -150,11 +169,15 @@ begin
 
 	for i in 1 to DELAY_LEVEL_CHANGE loop
 			tick(clkin, clkout);
+--			tick_half(clkin, clkout);
 			test_elevator_outputs(going_up, not going_up, level_current, ZERO, ZERO, ZERO);
+--			tick_half(clkin, clkout);
     end loop;
 		-- floor reached
 		tick(clkin, clkout);
-		test_elevator_outputs(ZERO, ZERO, level_next, ZERO, ZERO, ZERO);
+--		tick_half(clkin, clkout);
+		test_elevator_outputs(should_keep_going and going_up, should_keep_going and not going_up, level_next, ZERO, ZERO, ZERO);
+--		tick_half(clkin, clkout);
 end procedure;
 
 procedure arbitrary_additional_clock_cycles(signal clkin : in std_logic; signal clkout : out std_logic) is
@@ -245,6 +268,7 @@ begin
 		-- ****************** TEST #1 - basic functionality: reset, go up, go down
 		if (RUN_TEST1 = '1') then
 		tick_half(clk, clk);
+--		tick(clk, clk);
 		-- elevator should attempt to close door on reset
 		test_elevator_openclose(clk, clk, ZERO);
 
@@ -255,7 +279,7 @@ begin
 		floor_request_down(1) <= '0';	
 
 		-- elevator should move up for 8 cycles after initial button press
-		test_elevator_levelchange(clk, clk, i2lvf(0), ONE);
+		test_elevator_levelchange(clk, clk, i2lvf(0), ONE, ZERO);
 		
 		-- elevator level should now be '1', and doors should begin to open
 		-- door opening
@@ -271,17 +295,9 @@ begin
 		tick(clk, clk);
 		floor_request_up(0) <= '0';
 
-		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO);
-
-		-- door opening
-		test_elevator_openclose(clk, clk, ONE);
-
-		-- door open
-		test_elevator_passengerload(clk, clk, 0);
-
-		-- door closing
-		test_elevator_openclose(clk, clk, ZERO);
-
+		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
+		
+		test_elevator_open_load_close(clk, clk, 0);
 
 		-- test open elevator door by pressing the floor request button for current floor
 		floor_request_up(0) <= '1';
@@ -294,6 +310,67 @@ begin
 		tick(clk, clk);
 --		test_elevator_passengerload(clk, clk, 0);
 		test_elevator_openclose(clk, clk, ZERO);
+
+		-- test moving elevator up several levels at once
+		tick(clk, clk);
+		floor_request_down(FLOOR_MAX-1) <= '1';
+		tick(clk, clk);
+		floor_request_down(FLOOR_MAX-1) <= '0';
+
+		-- go to second to last floor
+		for i in 1 to FLOOR_MAX-2 loop
+			test_elevator_levelchange(clk, clk, i2lvf(i-1), ONE, ONE);
+		end loop;
+		-- go to last floor
+		test_elevator_levelchange(clk, clk, i2lvf(FLOOR_MAX-2), ONE, ZERO);
+
+		test_elevator_open_load_close(clk, clk, FLOOR_MAX-1);
+
+		tick(clk, clk);
+		floor_request_up(0) <= '1';
+		tick(clk, clk);
+		floor_request_up(0) <= '0';
+
+		-- go to second to first floor
+		for i in FLOOR_MAX-1 downto 2 loop
+			test_elevator_levelchange(clk, clk, i2lvf(i), ZERO, ONE);
+		end loop;
+		-- go to first floor
+		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
+
+		test_elevator_open_load_close(clk, clk, 0);
+
+
+		-- visit every level both ways
+		floor_request_up(FLOOR_MAX-1 downto 1) <= (others => '1');
+		tick(clk, clk);
+		floor_request_up(FLOOR_MAX-1 downto 1) <= (others => '0');
+
+		-- go to second to last floor
+		for i in 1 to FLOOR_MAX-2 loop
+			test_elevator_levelchange(clk, clk, i2lvf(i-1), ONE, ZERO);
+			test_elevator_open_load_close(clk, clk, i);
+			-- idle state after open/close
+			test_elevator_idle_single(clk, clk);
+		end loop;
+		-- go to last floor
+		test_elevator_levelchange(clk, clk, i2lvf(FLOOR_MAX-2), ONE, ZERO);
+		test_elevator_open_load_close(clk, clk, FLOOR_MAX-1);
+
+		tick(clk, clk);
+		floor_request_down(FLOOR_MAX-2 downto 0) <= (others => '1');
+		tick(clk, clk);
+		floor_request_down(FLOOR_MAX-2 downto 0) <= (others => '0');
+
+		-- go to second to first floor
+		for i in FLOOR_MAX-1 downto 2 loop
+			test_elevator_levelchange(clk, clk, i2lvf(i), ZERO, ZERO);
+			test_elevator_open_load_close(clk, clk, i-1);
+			test_elevator_idle_single(clk, clk);
+		end loop;
+		-- go to first floor
+		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
+		test_elevator_open_load_close(clk, clk, 0);
 
 
 		-- do nothing
@@ -384,7 +461,7 @@ begin
 		floor_request_down(1) <= '0';
 
 		door_request_open <= '1';
-		test_elevator_levelchange(clk, clk, i2lvf(0), ONE);
+		test_elevator_levelchange(clk, clk, i2lvf(0), ONE, ZERO);
 		door_request_open <= '0';
 
 		test_elevator_openclose(clk, clk, ONE);
@@ -398,7 +475,7 @@ begin
 		floor_request_up(0) <= '0';
 
 		door_request_open <= '1';
-		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO);
+		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
 		door_request_open <= '0';
 		
 		test_elevator_openclose(clk, clk, ONE);
@@ -491,7 +568,7 @@ begin
 		floor_request_down(1) <= '0';
 
 		door_sensor <= '1';
-		test_elevator_levelchange(clk, clk, i2lvf(0), ONE);
+		test_elevator_levelchange(clk, clk, i2lvf(0), ONE, ZERO);
 		door_sensor <= '0';
 
 		test_elevator_openclose(clk, clk, One);
@@ -506,7 +583,7 @@ begin
 		floor_request_up(0) <= '0';
 
 		door_sensor <= '1';
-		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO);
+		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
 		door_sensor <= '0';
 		
 		test_elevator_openclose(clk, clk, ONE);

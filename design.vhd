@@ -33,13 +33,17 @@ port(
   current_floor_out: out std_logic_vector(FLOOR_CTR_SIZE-1 downto 0);
   moving_direction_up_out: out std_logic;
   moving_direction_down_out: out std_logic;
-  door_open_out: out std_logic
+  door_open_out: out std_logic;
+  door_opening_out: out std_logic;
+  door_closing_out: out std_logic
 );
 
 constant LEVEL_CHANGE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_LEVEL_CHANGE, CTR_SIZE));
 constant PASSENGER_LOADING_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_PASSENGER_LOADING, CTR_SIZE));
 constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_DOOR_OPENCLOSE, CTR_SIZE));
 constant ALL_ZEROES : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(0, CTR_SIZE));
+
+constant LEVEL_REACHED_CTR_OFFSET : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(1, CTR_SIZE));
 
 constant FLOOR_FIRST : std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(0, FLOOR_CTR_SIZE));
 constant FLOOR_LAST : std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(FLOOR_MAX-1, FLOOR_CTR_SIZE));
@@ -84,6 +88,7 @@ architecture behavior_1 of elevator_controller is
   signal moving_direction_up: std_logic := '0';
   signal moving_direction_down: std_logic := '0';
   signal door_open: std_logic := '0';
+	signal floor_reached: std_logic := '0';
 
 	signal door_opening: std_logic := '0';
 	signal door_closing: std_logic := '0';
@@ -104,6 +109,10 @@ architecture behavior_1 of elevator_controller is
 	signal ctr_door_open_close : std_logic_vector(CTR_SIZE-1 downto 0);
 
 	signal door_delay_offset: std_logic_vector(CTR_SIZE-1 downto 0);
+	-- to offset motion counter since it will be reset on the "floor reached" state but elevator will still be in motion
+	-- e.g. when floor 3 is requested but elevator is at 0, it will "skip" past 1 and 2 but will hit the "floor reached" state every
+	-- level
+	signal level_reached_motion_offset : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '0');
 
 	-- door passenger loading helper
 	signal clk_in_door_passenger_loading: std_logic := '0';
@@ -133,6 +142,36 @@ begin
 	CTR_LEVEL_TRANSITION : counter
 		generic map(CTR_SIZE)
 		port map(reset_in_moving, clk_in_moving, ctr_moving);
+	
+	ANY_UP_OR_DOWN: process(floor_request_up, floor_request_down, current_floor) is
+		variable any_up : std_logic := '0';
+		variable any_down : std_logic := '0';
+		variable current_floor_int : integer;
+	begin
+		current_floor_int := to_integer(unsigned(current_floor));
+
+		any_up := '0';
+		any_down := '0';
+		for i in 0 to FLOOR_MAX-1 loop
+--			any_up <= any_up or '1';
+			if (i > current_floor_int and (floor_request_up(i) = '1' or floor_request_down(i) = '1')) then
+				any_up := any_up or '1';
+			else
+				any_up := any_up or '0';
+			end if;
+
+			if (i < current_floor_int and (floor_request_up(i) = '1' or floor_request_down(i) = '1')) then
+				any_down := any_down or '1';
+			else
+				any_down := any_down or '0';
+			end if;
+		--any_up := any_up or (i > current_floor_int and floor_request_up_in(i) = '1');
+		end loop;
+
+		any_request_up <= any_up;
+		any_request_down <= any_down;
+	end process;
+
 
 	-- input-retention process
 	INPUTS: process(reset_in, floor_request_up_in, floor_request_down_in, current_floor, door_opening, door_open) is
@@ -141,9 +180,6 @@ begin
 		variable up_requests_without_current_floor : std_logic_vector(FLOOR_MAX-1 downto 0);
 		variable down_requests_without_current_floor : std_logic_vector(FLOOR_MAX-1 downto 0);
 		variable current_floor_int : integer;
-
-		variable any_up : std_logic := '0';
-		variable any_down : std_logic := '0';
 	begin
 		current_floor_int := to_integer(unsigned(current_floor));
 
@@ -156,31 +192,25 @@ begin
 		if (reset_in = '1') then
 			floor_request_up <= (others => '0');
 			floor_request_down <= (others => '0');
-			any_request_up <= '0';
-			any_request_down <= '0';
+--			any_request_up <= '0';
+--			any_request_down <= '0';
 
 		-- disable floor request when door opens, but allow floor requests:
 		-- 1. while door is open, to hold it open
 		-- 2. while door closes, to open it again
 		else
 				-- mark any_request_up
-				any_request_up <= '0';
-				for i in 0 to FLOOR_MAX-1 loop
-					if (i > current_floor_int and (floor_request_up_in(i) = '1' or floor_request_down_in(i) = '1')) then
-						any_request_up <= any_request_up or '1';
-					end if;
-					--any_up := any_up or (i > current_floor_int and floor_request_up_in(i) = '1');
-				end loop;
---				any_request_up <= any_up;
+				-- approach idea thanks to solution #2 from the folowing SO post:
+				-- https://stackoverflow.com/a/20300928
 
 				-- mark any_request_down
-				any_request_down <= '0';
-				for i in 0 to FLOOR_MAX-1 loop
-					if (i < current_floor_int and (floor_request_up_in(i) = '1' or floor_request_down_in(i) = '1')) then
-						any_request_down <= any_request_down or '1';
-					end if;
-					--any_down := any_down or (i > current_floor_int and floor_request_up_in(i) = '1');
-				end loop;
+--				any_request_down <= '0';
+--				for i in 0 to FLOOR_MAX-1 loop
+--					if (i < current_floor_int and (floor_request_up_in(i) = '1' or floor_request_down_in(i) = '1')) then
+--						any_request_down <= any_request_down or '1';
+--					end if;
+--					--any_down := any_down or (i > current_floor_int and floor_request_up_in(i) = '1');
+--				end loop;
 --				any_request_down <= any_down;
 
 				-- clear current floor level UP request if the one-hot index is disabled
@@ -217,12 +247,14 @@ begin
 
 
 	OUTPUTS: process(clk_in, reset_in,
-		current_floor, moving_direction_up, moving_direction_down, door_open, door_opening) is
+		current_floor, moving_direction_up, moving_direction_down, door_open, door_opening, door_closing) is
 	begin
     current_floor_out <= current_floor;
     moving_direction_up_out <= moving_direction_up;
     moving_direction_down_out <= moving_direction_down;
     door_open_out <= door_open;
+	  door_opening_out <= door_opening;
+	  door_closing_out <= door_closing;
 	end process;
 
 
@@ -239,11 +271,18 @@ begin
 --		if (falling_edge(clk_in) or rising_edge(clk_in)) then
 		reset_in_door_open_close <= reset_in or ((not door_opening) and (not door_closing));
 		reset_in_door_passenger_loading <= reset_in or (not door_open);
-		reset_in_moving <= reset_in or (not (moving_direction_up or moving_direction_down));
+		reset_in_moving <= reset_in or (not (moving_direction_up or moving_direction_down) or floor_reached);
 --		end if;
 	end process;
 	STATE_INTERNALS: process(reset_in, e_state) is
+		variable next_floor : std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := (others => '0');
 	begin
+		if (moving_direction_up = '1') then
+			next_floor := std_logic_vector(unsigned(current_floor) + 1);
+		else
+			next_floor := std_logic_vector(unsigned(current_floor) - 1);
+		end if;
+
 		if (reset_in = '1') then
 			moving_direction_up <= '0'; moving_direction_down <= '0';
 			-- this design assumes the door is open on reset (e.g. attempt to close to get to idle state)
@@ -254,7 +293,7 @@ begin
 		else
 			case e_state is
 				when S_DOOR_OPENING =>
-					door_opening <= '1';
+					door_opening <= '1'; floor_reached <= '0';
 				when S_DOOR_OPEN =>
 					door_opening <= '0'; door_open <= '1';
 					door_delay_offset <= ( others => '0' );
@@ -264,24 +303,30 @@ begin
 					door_closing <= '0';
 					door_delay_offset <= std_logic_vector(unsigned(DOOR_OPENCLOSE_DELAY) - unsigned(ctr_door_open_close));
 				when S_MOVING_UP =>
-					moving_direction_up <= '1';
+					moving_direction_up <= '1'; floor_reached <= '0';
 				when S_MOVING_DOWN =>
-					moving_direction_down <= '1';
+					moving_direction_down <= '1'; floor_reached <= '0';
 
 				when S_FLOOR_REACHED =>
-					if (moving_direction_up = '1') then
-						current_floor <= std_logic_vector(unsigned(current_floor) + 1);
+					floor_reached <= '1';
+					current_floor <= next_floor;
+
+					if (floor_request_up(to_integer(unsigned(next_floor))) = '1' or
+							floor_request_down(to_integer(unsigned(next_floor))) = '1') then
+						moving_direction_down <= '0';
+						moving_direction_up <= '0';
+						level_reached_motion_offset <= (others => '0');
 					else
-						current_floor <= std_logic_vector(unsigned(current_floor) - 1);
+						-- continue going up
+						level_reached_motion_offset <= LEVEL_REACHED_CTR_OFFSET;
 					end if;
-					moving_direction_down <= '0';
-					moving_direction_up <= '0';
 	
 				--when S_IDLE =>
 				when others =>
 					door_delay_offset <= (others => '0');
 					moving_direction_up <= '0'; moving_direction_down <= '0';
 					door_opening <= '0'; door_closing <= '0'; door_open <= '0';
+					floor_reached <= '0';
 			end case;
 		end if;
 	end process;
@@ -320,7 +365,9 @@ begin
 					end if;
 
 				when S_DOOR_OPEN =>
-						if (door_request_open_in = '1' or door_sensor_in = '1') then
+						if (door_request_open_in = '1' or door_sensor_in = '1' or
+								floor_request_up(to_integer(unsigned(current_floor))) = '1' or
+								floor_request_down(to_integer(unsigned(current_floor))) = '1') then
 							-- remain open
 						elsif ((door_request_close_in = '1') or (ctr_door_passenger_loading >= PASSENGER_LOADING_DELAY)) then
 							e_state <= S_DOOR_CLOSING;
@@ -328,7 +375,9 @@ begin
 
 				when S_DOOR_CLOSING =>
 					-- process "open door" button press
-					if (door_request_open_in = '1' or door_sensor_in = '1') then
+					if (door_request_open_in = '1' or door_sensor_in = '1' or
+							floor_request_up(to_integer(unsigned(current_floor))) = '1' or
+							floor_request_down(to_integer(unsigned(current_floor))) = '1') then
 						e_state <= S_DOOR_REOPEN_INTERMEDIATE;
 
 					elsif (ctr_door_open_close = DOOR_OPENCLOSE_DELAY) then
@@ -340,18 +389,28 @@ begin
 
 				when S_MOVING_UP =>
 					-- floor reached
-					if (ctr_moving = LEVEL_CHANGE_DELAY) then
+					if (ctr_moving = std_logic_vector(unsigned(LEVEL_CHANGE_DELAY) - unsigned(level_reached_motion_offset))) then
 						e_state <= S_FLOOR_REACHED;
 					end if;
 
 				when S_MOVING_DOWN =>
 					-- floor reached
-					if (ctr_moving = LEVEL_CHANGE_DELAY) then
+					if (ctr_moving = std_logic_vector(unsigned(LEVEL_CHANGE_DELAY) - unsigned(level_reached_motion_offset))) then
 						e_state <= S_FLOOR_REACHED;
 					end if;
 
 				when S_FLOOR_REACHED =>
-					e_state <= S_DOOR_OPENING;
+					if (floor_request_up(to_integer(unsigned(current_floor))) = '1' or
+							floor_request_down(to_integer(unsigned(current_floor))) = '1') then
+						e_state <= S_DOOR_OPENING;
+					else
+					-- continue moving
+						if (moving_direction_up = '1') then
+							e_state <= S_MOVING_UP;
+						else
+							e_state <= S_MOVING_DOWN;
+						end if;
+					end if;
 			end case;
 
 		end if;
