@@ -132,6 +132,14 @@ architecture behavior_1 of elevator_controller is
 	signal reset_in_moving: std_logic := '0';
 	signal ctr_moving : std_logic_vector(CTR_SIZE-1 downto 0);
 
+	function bool_to_bit(condition_result : boolean) return std_logic is
+	begin
+		if (condition_result) then
+			return '1';
+		else
+			return '0';
+		end if;
+	end function;
 begin
 
 	-- **** COMPONENTS
@@ -208,36 +216,13 @@ begin
 		any_down_above := '0';
     any_down_below := '0';
 		for i in 0 to FLOOR_MAX-1 loop
---			any_up <= any_up or '1';
-			if (i > current_floor_int) then -- or floor_request_down(i) = '1')) then
-        if (floor_request_up(i) = '1') then
-          any_up_above := any_up_above or '1';
-        elsif (floor_request_down(i) = '1') then
-          any_up_below := any_up_below or '1';
-        else
-          any_up_above := any_up_above or '0';
-          any_up_below := any_up_below or '0';
-        end if;
-			else
-				any_up_above := any_up_above or '0';
-        any_up_below := any_up_below or '0';
-			end if;
-      
-      if (i < current_floor_int) then -- or floor_request_down(i) = '1')) then
-        if (floor_request_up(i) = '1') then
-          any_down_above := any_down_above or '1';
-        elsif (floor_request_down(i) = '1') then
-          any_down_below := any_down_below or '1';
-        else
-          any_down_above := any_down_above or '0';
-          any_down_below := any_down_below or '0';
-        end if;
-			else
-				any_down_above := any_down_above or '0';
-        any_down_below := any_down_below or '0';
-			end if;
-     
-		--any_up := any_up or (i > current_floor_int and floor_request_up_in(i) = '1');
+			-- find requests above
+      any_up_above := any_up_above or (bool_to_bit(i > current_floor_int) and floor_request_up(i));
+      any_up_below := any_up_below or (bool_to_bit(i > current_floor_int) and floor_request_down(i));
+
+			-- find requests below
+      any_down_above := any_down_above or (bool_to_bit(i < current_floor_int) and floor_request_up(i));
+      any_down_below := any_down_below or (bool_to_bit(i < current_floor_int) and floor_request_down(i));
 		end loop;
 
 		any_request_up_above <= any_up_above;

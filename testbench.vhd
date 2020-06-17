@@ -530,7 +530,6 @@ begin
  
 
 		-- ****************** TEST #3 - door_sensor: this is a repeat of test #2 for door_request_open, but
-		-- using door_sensor
 		if (RUN_TEST3 = '1') then
 		-- Test 1. Open door, hold open & let close.
 		tick_half(clk, clk);
@@ -639,7 +638,6 @@ begin
    
 		
 		-- ****************** TEST #4 - door_request_close: test the "close doors" button
-		-- using door_sensor
 		if (RUN_TEST4 = '1') then
 			-- Test 1. Open door & attempt to close
 			tick_half(clk, clk);
@@ -680,8 +678,7 @@ begin
 		-- test 4
 		end if;
 
-				-- ****************** TEST #4 - door_request_open, door_sensor and door_request_close: test conflicting cases
-		-- using door_sensor
+		-- ****************** TEST #5 - door_request_open, door_sensor and door_request_close: conflicting cases
 		if (RUN_TEST5 = '1') then
 			-- Test 1. Open door & attempt to close
 			tick_half(clk, clk);
