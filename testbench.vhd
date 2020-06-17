@@ -17,10 +17,10 @@ entity testbench is
 	constant ONE : std_logic := '1';
 
 	constant RUN_TEST1 : STD_LOGIC := '1';
-	constant RUN_TEST2 : STD_LOGIC := '1';
-	constant RUN_TEST3 : STD_LOGIC := '1';
-	constant RUN_TEST4 : STD_LOGIC := '1';
-	constant RUN_TEST5 : STD_LOGIC := '1';
+	constant RUN_TEST2 : STD_LOGIC := '0';
+	constant RUN_TEST3 : STD_LOGIC := '0';
+	constant RUN_TEST4 : STD_LOGIC := '0';
+	constant RUN_TEST5 : STD_LOGIC := '0';
 
 	constant CLK_DELAY : time := 5 ns;
 end testbench; 
@@ -169,15 +169,11 @@ begin
 
 	for i in 1 to DELAY_LEVEL_CHANGE loop
 			tick(clkin, clkout);
---			tick_half(clkin, clkout);
 			test_elevator_outputs(going_up, not going_up, level_current, ZERO, ZERO, ZERO);
---			tick_half(clkin, clkout);
     end loop;
 		-- floor reached
 		tick(clkin, clkout);
---		tick_half(clkin, clkout);
 		test_elevator_outputs(should_keep_going and going_up, should_keep_going and not going_up, level_next, ZERO, ZERO, ZERO);
---		tick_half(clkin, clkout);
 end procedure;
 
 procedure arbitrary_additional_clock_cycles(signal clkin : in std_logic; signal clkout : out std_logic) is
@@ -342,9 +338,9 @@ begin
 
 
 		-- visit every level both ways
-		floor_request_up(FLOOR_MAX-1 downto 1) <= (others => '1');
+		floor_request_down(FLOOR_MAX-1 downto 1) <= (others => '1');
 		tick(clk, clk);
-		floor_request_up(FLOOR_MAX-1 downto 1) <= (others => '0');
+		floor_request_down(FLOOR_MAX-1 downto 1) <= (others => '0');
 
 		-- go to second to last floor
 		for i in 1 to FLOOR_MAX-2 loop
@@ -358,9 +354,9 @@ begin
 		test_elevator_open_load_close(clk, clk, FLOOR_MAX-1);
 
 		tick(clk, clk);
-		floor_request_down(FLOOR_MAX-2 downto 0) <= (others => '1');
+		floor_request_up(FLOOR_MAX-2 downto 0) <= (others => '1');
 		tick(clk, clk);
-		floor_request_down(FLOOR_MAX-2 downto 0) <= (others => '0');
+		floor_request_up(FLOOR_MAX-2 downto 0) <= (others => '0');
 
 		-- go to second to first floor
 		for i in FLOOR_MAX-1 downto 2 loop
@@ -372,6 +368,47 @@ begin
 		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
 		test_elevator_open_load_close(clk, clk, 0);
 
+		-- *** go to last floor and back down to first floor, stopping at every level each way
+		floor_request_down(FLOOR_MAX-1 downto 1) <= (others => '1');
+		tick(clk, clk);
+		floor_request_down(FLOOR_MAX-1 downto 1) <= (others => '0');
+
+		floor_request_up(FLOOR_MAX-2 downto 0) <= (others => '1');
+		tick(clk, clk);
+		floor_request_up(FLOOR_MAX-2 downto 0) <= (others => '0');
+
+		for i in 1 to DELAY_LEVEL_CHANGE-1 loop
+			tick(clk, clk);
+			test_elevator_outputs(ONE, ZERO, i2lvf(0), ZERO, ZERO, ZERO);
+    end loop;
+		-- floor reached
+		tick(clk, clk);
+		test_elevator_outputs(ZERO, ZERO, i2lvf(1), ZERO, ZERO, ZERO);
+
+		test_elevator_open_load_close(clk, clk, 1);
+		-- idle state after open/close
+		test_elevator_idle_single(clk, clk);
+
+		-- go to second to last floor
+		for i in 2 to FLOOR_MAX-2 loop
+			test_elevator_levelchange(clk, clk, i2lvf(i-1), ONE, ZERO);
+			test_elevator_open_load_close(clk, clk, i);
+			-- idle state after open/close
+			test_elevator_idle_single(clk, clk);
+		end loop;
+		-- go to last floor
+		test_elevator_levelchange(clk, clk, i2lvf(FLOOR_MAX-2), ONE, ZERO);
+		test_elevator_open_load_close(clk, clk, FLOOR_MAX-1);
+
+		-- go to second floor
+--		for i in FLOOR_MAX-1 downto 2 loop
+--			test_elevator_levelchange(clk, clk, i2lvf(i), ZERO, ZERO);
+--			test_elevator_open_load_close(clk, clk, i-1);
+--			test_elevator_idle_single(clk, clk);
+--		end loop;
+--		-- go to first floor
+--		test_elevator_levelchange(clk, clk, i2lvf(1), ZERO, ZERO);
+--		test_elevator_open_load_close(clk, clk, 0);
 
 		-- do nothing
 		test_elevator_idle(clk, clk);
@@ -493,7 +530,6 @@ begin
  
 
 		-- ****************** TEST #3 - door_sensor: this is a repeat of test #2 for door_request_open, but
-		-- using door_sensor
 		if (RUN_TEST3 = '1') then
 		-- Test 1. Open door, hold open & let close.
 		tick_half(clk, clk);
@@ -602,7 +638,6 @@ begin
    
 		
 		-- ****************** TEST #4 - door_request_close: test the "close doors" button
-		-- using door_sensor
 		if (RUN_TEST4 = '1') then
 			-- Test 1. Open door & attempt to close
 			tick_half(clk, clk);
@@ -643,8 +678,7 @@ begin
 		-- test 4
 		end if;
 
-				-- ****************** TEST #4 - door_request_open, door_sensor and door_request_close: test conflicting cases
-		-- using door_sensor
+		-- ****************** TEST #5 - door_request_open, door_sensor and door_request_close: conflicting cases
 		if (RUN_TEST5 = '1') then
 			-- Test 1. Open door & attempt to close
 			tick_half(clk, clk);
