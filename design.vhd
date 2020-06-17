@@ -1,3 +1,4 @@
+-- CSE 143 
 
 -- elevator
 library IEEE;
@@ -101,7 +102,8 @@ architecture behavior_1 of elevator_controller is
 	signal traveling_up: std_logic := '0';
 	signal traveling_down: std_logic := '0';
 
-	-- internals
+	-- to allow doors to open when there are other requests
+	signal just_landed: std_logic := '0';
 
 	-- hold input requests - users do not generally hold the button down until elevator arrives!
 	signal floor_request_up: std_logic_vector(FLOOR_MAX-1 downto 0) := (others => '0');
@@ -274,8 +276,6 @@ begin
 --				any_request_down_below <= any_down;
 
 				-- clear current floor level UP request if the one-hot index is disabled
-
-				
 				if ((door_open = '1' or door_opening = '1') and
 						(
 							(traveling_up = '0' and traveling_down = '0' and
@@ -291,8 +291,7 @@ begin
 				end if;
 
 				-- clear current floor level DOWN request if the one-hot index is disabled
---				if (door_opening = '1' and floor_request_down(current_floor_int) = '1') then
-				if ((door_open = '1' or door_opening = '1') and --floor_request_down(current_floor_int) = '1') then
+				if ((door_open = '1' or door_opening = '1') and
 						(
 							(traveling_up = '0' and traveling_down = '0' and
 								(floor_request_up(current_floor_int) = '1' or floor_request_down(current_floor_int) = '1')
@@ -305,22 +304,6 @@ begin
 				else
 					floor_request_down <= floor_request_down or floor_request_down_in;
 				end if;
---			floor_request_up <= up_requests_without_current_floor;
---			floor_request_down <= down_requests_without_current_floor;
-			-- "up" button
---			if (current_floor = '1' and door_opening = '1') then
---				floor_request_up <= '0';
---			elsif (floor_request_up_in = '1') then
---				floor_request_up <= floor_request_up or floor_request_up_in;
-----				floor_request_up <= '1';
---			end if;
---
-			-- "down" button
---			if (current_floor = '0' and door_opening = '1') then
---				floor_request_down <= '0';
---			elsif (floor_request_down_in = '1') then
---				floor_request_down <= '1';
---			end if;
 		end if;
 	end process;
 
@@ -353,7 +336,11 @@ begin
 		reset_in_moving <= reset_in or (not (moving_direction_up or moving_direction_down) or floor_reached);
 --		end if;
 	end process;
-	STATE_INTERNALS: process(reset_in, e_state) is
+
+	STATE_INTERNALS: process(reset_in, e_state--,
+--		traveling_up, any_request_up_above, any_request_up_below,
+--		traveling_down, any_request_down_above, any_request_down_below
+	) is
 		variable next_floor : std_logic_vector(FLOOR_CTR_SIZE-1 downto 0) := (others => '0');
 	begin
 		if (moving_direction_up = '1') then
@@ -389,9 +376,15 @@ begin
 				when S_FLOOR_REACHED =>
 					floor_reached <= '1';
 					current_floor <= next_floor;
+					
+--					if (floor_request_up(to_integer(unsigned(next_floor))) = '1' or
+--							floor_request_down(to_integer(unsigned(next_floor))) = '1') then
 
-					if (floor_request_up(to_integer(unsigned(next_floor))) = '1' or
-							floor_request_down(to_integer(unsigned(next_floor))) = '1') then
+--					if ((traveling_up = '1' and (any_request_up_above = '0' and any_request_up_below = '0')) or
+--							(traveling_down = '1' and (any_request_down_above = '0' and any_request_down_below = '0'))
+					if ((traveling_up = '0') or
+							(traveling_down = '0')
+						 ) then
 						moving_direction_down <= '0';
 						moving_direction_up <= '0';
 						level_reached_motion_offset <= (others => '0');
