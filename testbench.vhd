@@ -52,9 +52,7 @@ end component;
 -- testbench helpers
 signal reset: std_logic := '1';
 signal clk: std_logic := '1';
---signal count_up: std_logic := '1';
 
---signal count : std_logic_vector(N_ctr-1 downto 0);
 signal current_floor: std_logic;
 signal moving_direction_up: std_logic;
 signal moving_direction_down: std_logic;
@@ -128,16 +126,6 @@ begin
 		tick(clkin, clkout);
 	end loop;
 end procedure;
-
---procedure test_door_opening(
---	current_floor: std_logic
---) is
---begin
---	for i in 1 to DELAY_DOOR_OPENCLOSE loop
---		tick(clk, clk);
---		test_elevator_outputs(ZERO, ZERO, current_floor, ZERO);
---  end loop;
---end procedure;
 
 
 begin
@@ -267,14 +255,13 @@ begin
 		if (RUN_TEST2 = '1') then
 		-- Test 1. Open door, hold open & let close.
 		tick_half(clk, clk);
---		assert false report "elevator should be idle" severity note;
+    
 		-- elevator should be idle
 		for i in 1 to DELAY_DOOR_OPENCLOSE+1 loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 	  end loop;
 
---		assert false report "elevator should begin opening door" severity note;
 		door_request_open <= '1';
 		tick(clk, clk);
 		door_request_open <= '0';
@@ -287,7 +274,6 @@ begin
     end loop;
 
 		-- door open
---		assert false report "elevator door should be open" severity note;
 		for i in 1 to DELAY_PASSENGER_LOADING loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
@@ -323,16 +309,19 @@ begin
 		door_request_open <= '1';
 		tick(clk, clk);
 		test_elevator_openclose(clk, clk);
-
+    
+    -- door should remain open
 		for i in 1 to DELAY_PASSENGER_LOADING*3 loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
     end loop;
 		door_request_open <= '0';
+    -- door should now begin to close
 		for i in 1 to DELAY_DOOR_OPENCLOSE-2 loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
     end loop;
+    -- but right before it closes completely, let's open it again
 		door_request_open <= '1';
 		tick(clk, clk);
 		door_request_open <= '1';
@@ -344,6 +333,7 @@ begin
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
     end loop;
+    -- and finally let it close
 		door_request_open <= '0';
 
 		test_elevator_openclose(clk, clk);
@@ -397,27 +387,24 @@ begin
 		if (RUN_TEST3 = '1') then
 		-- Test 1. Open door, hold open & let close.
 		tick_half(clk, clk);
---		assert false report "elevator should be idle" severity note;
 		-- elevator should be idle
 		for i in 1 to DELAY_DOOR_OPENCLOSE+1 loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 	  end loop;
 
---		assert false report "elevator should begin opening door" severity note;
 		door_sensor <= '1';
 		tick(clk, clk);
 		door_sensor <= '0';
 		
 		-- elevator level should now be '0', and doors should begin to open
-				-- door opening
+		-- door opening
 		for i in 1 to DELAY_DOOR_OPENCLOSE-1 loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
     end loop;
 
 		-- door open
---		assert false report "elevator door should be open" severity note;
 		for i in 1 to DELAY_PASSENGER_LOADING loop
 			tick(clk, clk);
 			test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
@@ -435,7 +422,7 @@ begin
 		-- door closing
 		test_elevator_openclose(clk, clk);
 
--- Test 2. press door open button at the last cycle of closing - should start to open door
+    -- Test 2. press door open button at the last cycle of closing - should start to open door
 		door_sensor <= '1';
 		tick(clk, clk);
 		door_sensor <= '0';
@@ -527,7 +514,6 @@ begin
 			-- Test 1. Open door & attempt to close
 			tick_half(clk, clk);
 	
-	--		assert false report "elevator should begin opening door" severity note;
 			door_request_open <= '1';
 			tick(clk, clk);
 			door_request_open <= '0';
@@ -539,13 +525,8 @@ begin
 				tick(clk, clk);
 				test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 	    end loop;
-
-			-- release "close door" button before gate opens
---			tick(clk, clk);
---			door_request_close <= '0';
 	
 			-- door open
-	--		assert false report "elevator door should be open for 1 cycle" severity note;
 			for i in 1 to 1 loop
 				tick(clk, clk);
 				test_elevator_outputs(ZERO, ZERO, ZERO, ONE);
@@ -563,13 +544,11 @@ begin
 		-- test 4
 		end if;
 
-				-- ****************** TEST #4 - door_request_open, door_sensor and door_request_close: test conflicting cases
-		-- using door_sensor
+		-- ****************** TEST #4 - door_request_open, door_sensor and door_request_close: test conflicting cases
 		if (RUN_TEST5 = '1') then
 			-- Test 1. Open door & attempt to close
 			tick_half(clk, clk);
-	
-	--		assert false report "elevator should begin opening door" severity note;
+
 			door_request_open <= '1';
 			tick(clk, clk);
 			door_request_open <= '0';
@@ -581,9 +560,6 @@ begin
 				test_elevator_outputs(ZERO, ZERO, ZERO, ZERO);
 	    end loop;
 
-			-- release "close door" button before gate opens
---			tick(clk, clk);
---			door_request_close <= '0';
 	
 			-- door_close should have no effect with door_open or door_sensor enabled
 			for i in 1 to DELAY_PASSENGER_LOADING*3 loop

@@ -1,5 +1,6 @@
+-- CSE 143 SP 20
+-- Rafael Munoz
 
--- elevator
 library IEEE;
 use IEEE.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -35,9 +36,6 @@ port(
 constant LEVEL_CHANGE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_LEVEL_CHANGE, CTR_SIZE));
 constant PASSENGER_LOADING_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_PASSENGER_LOADING, CTR_SIZE));
 constant DOOR_OPENCLOSE_DELAY : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(DELAY_DOOR_OPENCLOSE, CTR_SIZE));
-constant ALL_ZEROES : std_logic_vector(CTR_SIZE-1 downto 0) := std_logic_vector(to_unsigned(0, CTR_SIZE));
---constant ALL_ONES_2 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
---constant ALL_ONES_3 : std_logic_vector(CTR_SIZE-1 downto 0) := (others => '1');
 
 end elevator_controller;
 
@@ -58,20 +56,8 @@ architecture behavior_1 of elevator_controller is
 	  count_out: out std_logic_vector(N-1 downto 0)
 	);
 	end component;
-
-	component bidirectional_counter_no_overflow is
-	generic( N: integer );
-	port(
-	  reset_in: in std_logic;
-	  clk_in: in std_logic;
-		
-		-- up or down?
-		count_up_in: in std_logic;
-	
-	  count_out: out std_logic_vector(N-1 downto 0)
-	);
-	end component;
-
+  
+	-- internals
   signal current_floor: std_logic := '0';
   signal moving_direction_up: std_logic := '0';
   signal moving_direction_down: std_logic := '0';
@@ -80,9 +66,6 @@ architecture behavior_1 of elevator_controller is
 	signal door_opening: std_logic := '0';
 	signal door_closing: std_logic := '0';
 
-
-	-- internals
-
 	-- hold input requests - users do not generally hold the button down until elevator arrives!
 	signal floor_request_up: std_logic := '0';
 	signal floor_request_down: std_logic := '0';
@@ -90,7 +73,6 @@ architecture behavior_1 of elevator_controller is
 	-- door open/close helper
 	signal clk_in_door_open_close: std_logic := '0';
 	signal reset_in_door_open_close: std_logic := '0';
---	signal direction_open_close: std_logic := '1';
 	signal ctr_door_open_close : std_logic_vector(CTR_SIZE-1 downto 0);
 
 	signal door_delay_offset: std_logic_vector(CTR_SIZE-1 downto 0);
@@ -107,11 +89,10 @@ architecture behavior_1 of elevator_controller is
 
 begin
 	-- counter for opening / closing the door
-	CTR_CMP_DOOR_OPEN_CLOSE : counter --bidirectional_counter_no_overflow
+	CTR_CMP_DOOR_OPEN_CLOSE : counter
 		generic map(CTR_SIZE)
 		port map(reset_in_door_open_close,
 			clk_in_door_open_close,
---			direction_open_close,
 			ctr_door_open_close);
 
 	-- counter to waiting for passengers to enter/leave elevator
@@ -170,19 +151,11 @@ begin
 		clk_in_door_passenger_loading <= clk_in and door_open;
 		clk_in_moving <= clk_in and (moving_direction_up or moving_direction_down);
 
-		
---		direction_open_close <= not door_closing;
-		-- timer resets
---		if (falling_edge(clk_in) or rising_edge(clk_in)) then
+		-- resets
 		reset_in_door_open_close <= reset_in or ((not door_opening) and (not door_closing));
 		reset_in_door_passenger_loading <= reset_in or (not door_open);
 		reset_in_moving <= reset_in or (not (moving_direction_up or moving_direction_down));
---		end if;
 	end process;
-
---	OTHER_INTERNALS: process(floor_reuqest_up,) is
---	begin
---	end process;
 
 	STATE_INTERNALS: process(reset_in, e_state) is
 	begin
